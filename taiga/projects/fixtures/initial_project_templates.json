@@ -635,8 +635,42 @@
             }
         ],
         "epic_custom_attributes": [],
-        "us_custom_attributes": [],
-        "task_custom_attributes": [],
+        "us_custom_attributes": [
+            {
+                "name": "Priority",
+                "description": "Sets the priority of the user story",
+                "type": "dropdown",
+                "order": 1,
+                "extra": [
+                    "Low",
+                    "Medium",
+                    "High"
+                ]
+            },
+            {
+                "name": "Acceptance Criteria",
+                "description": "Enumerates the acceptance criteria for the user story",
+                "type": "richtext",
+                "order": 2,
+                "extra": null
+            }
+        ],
+        "task_custom_attributes": [
+            {
+                "name": "Estimated Effort",
+                "description": "Estimated number of hours for completing the task",
+                "type": "number",
+                "order": 1,
+                "extra": null
+            },
+            {
+                "name": "Actual Effort",
+                "description": "Actual number of hours invested in completing the task",
+                "type": "number",
+                "order": 2,
+                "extra": null
+            }
+        ],
         "issue_custom_attributes": []
     }
 },
@@ -1276,8 +1310,42 @@
             }
         ],
         "epic_custom_attributes": [],
-        "us_custom_attributes": [],
-        "task_custom_attributes": [],
+        "us_custom_attributes": [
+            {
+                "name": "Priority",
+                "description": "Sets the priority of the user story",
+                "type": "dropdown",
+                "order": 1,
+                "extra": [
+                    "Low",
+                    "Medium",
+                    "High"
+                ]
+            },
+            {
+                "name": "Acceptance Criteria",
+                "description": "Enumerates the acceptance criteria for the user story",
+                "type": "richtext",
+                "order": 2,
+                "extra": null
+            }
+        ],
+        "task_custom_attributes": [
+            {
+                "name": "Estimated Effort",
+                "description": "Estimated number of hours for completing the task",
+                "type": "number",
+                "order": 1,
+                "extra": null
+            },
+            {
+                "name": "Actual Effort",
+                "description": "Actual number of hours invested in completing the task",
+                "type": "number",
+                "order": 2,
+                "extra": null
+            }
+        ],
         "issue_custom_attributes": []
     }
 }

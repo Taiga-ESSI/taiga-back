@@ -1195,7 +1195,8 @@ class ProjectTemplate(TaggedMixin, TagsColorsMixin, models.Model):
                 "name": ca.name,
                 "description": ca.description,
                 "type": ca.type,
-                "order": ca.order
+                "order": ca.order,
+                "extra": ca.extra
             })
 
         self.us_custom_attributes = []
@@ -1204,7 +1205,8 @@ class ProjectTemplate(TaggedMixin, TagsColorsMixin, models.Model):
                 "name": ca.name,
                 "description": ca.description,
                 "type": ca.type,
-                "order": ca.order
+                "order": ca.order,
+                "extra": ca.extra
             })
 
         self.task_custom_attributes = []
@@ -1213,7 +1215,8 @@ class ProjectTemplate(TaggedMixin, TagsColorsMixin, models.Model):
                 "name": ca.name,
                 "description": ca.description,
                 "type": ca.type,
-                "order": ca.order
+                "order": ca.order,
+                "extra": ca.extra
             })
 
         self.issue_custom_attributes = []
@@ -1222,7 +1225,8 @@ class ProjectTemplate(TaggedMixin, TagsColorsMixin, models.Model):
                 "name": ca.name,
                 "description": ca.description,
                 "type": ca.type,
-                "order": ca.order
+                "order": ca.order,
+                "extra": ca.extra
             })
 
         try:
@@ -1398,6 +1402,7 @@ class ProjectTemplate(TaggedMixin, TagsColorsMixin, models.Model):
                 description=ca["description"],
                 type=ca["type"],
                 order=ca["order"],
+                extra=ca.get("extra"),
                 project=project
             )
 
@@ -1407,6 +1412,7 @@ class ProjectTemplate(TaggedMixin, TagsColorsMixin, models.Model):
                 description=ca["description"],
                 type=ca["type"],
                 order=ca["order"],
+                extra=ca.get("extra"),
                 project=project
             )
 
@@ -1416,6 +1422,7 @@ class ProjectTemplate(TaggedMixin, TagsColorsMixin, models.Model):
                 description=ca["description"],
                 type=ca["type"],
                 order=ca["order"],
+                extra=ca.get("extra"),
                 project=project
             )
 
@@ -1425,6 +1432,7 @@ class ProjectTemplate(TaggedMixin, TagsColorsMixin, models.Model):
                 description=ca["description"],
                 type=ca["type"],
                 order=ca["order"],
+                extra=ca.get("extra"),
                 project=project
             )
 
