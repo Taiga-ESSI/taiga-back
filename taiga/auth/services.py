@@ -87,16 +87,19 @@ def make_auth_response_data(user):
 
 
 def login(username: str, password: str):
-    try:
-        user = get_and_validate_user(username=username, password=password)
-    except exc.WrongArguments:
-        raise AuthenticationFailed(
-            _('No active account found with the given credentials'),
-            'invalid_credentials',
-        )
+    # Pol Alcoverro: comentado codigo por deshabilitar el login clasico en favor de Google SSO.
+    raise exc.BadRequest(_('Classic login is disabled.'))
 
-    # Generate data
-    return make_auth_response_data(user)
+    # Pol Alcoverro: comentado codigo por conservar el flujo original sin ejecutarlo.
+    # try:
+    #     user = get_and_validate_user(username=username, password=password)
+    # except exc.WrongArguments:
+    #     raise AuthenticationFailed(
+    #         _('No active account found with the given credentials'),
+    #         'invalid_credentials',
+    #     )
+    #
+    # return make_auth_response_data(user)
 
 
 def refresh_token(refresh_token: str):
@@ -174,27 +177,31 @@ def public_register(username:str, password:str, email:str, full_name:str):
     :returns: User
     """
 
-    is_registered, reason = is_user_already_registered(username=username, email=email)
-    if is_registered:
-        raise exc.WrongArguments(reason)
+    # Pol Alcoverro: comentado codigo por deshabilitar el registro clasico en favor de Google SSO.
+    raise exc.BadRequest(_('Public registration is disabled.'))
 
-    user_model = get_user_model()
-    user = user_model(username=username,
-                      email=email,
-                      email_token=str(uuid.uuid4()),
-                      new_email=email,
-                      verified_email=False,
-                      full_name=full_name,
-                      read_new_terms=True)
-    user.set_password(password)
-    try:
-        user.save()
-    except IntegrityError:
-        raise exc.WrongArguments(_("User is already registered."))
-
-    send_register_email(user)
-    user_registered_signal.send(sender=user.__class__, user=user)
-    return user
+    # Pol Alcoverro: comentado codigo por conservar el flujo original sin ejecutarlo.
+    # is_registered, reason = is_user_already_registered(username=username, email=email)
+    # if is_registered:
+    #     raise exc.WrongArguments(reason)
+    #
+    # user_model = get_user_model()
+    # user = user_model(username=username,
+    #                   email=email,
+    #                   email_token=str(uuid.uuid4()),
+    #                   new_email=email,
+    #                   verified_email=False,
+    #                   full_name=full_name,
+    #                   read_new_terms=True)
+    # user.set_password(password)
+    # try:
+    #     user.save()
+    # except IntegrityError:
+    #     raise exc.WrongArguments(_('User is already registered.'))
+    #
+    # send_register_email(user)
+    # user_registered_signal.send(sender=user.__class__, user=user)
+    # return user
 
 
 @tx.atomic
@@ -204,29 +211,33 @@ def private_register_for_new_user(token:str, username:str, email:str,
     Given a inviation token, try register new user matching
     the invitation token.
     """
-    is_registered, reason = is_user_already_registered(username=username, email=email)
-    if is_registered:
-        raise exc.WrongArguments(reason)
+    # Pol Alcoverro: comentado codigo por deshabilitar el registro clasico vinculado a invitaciones.
+    raise exc.BadRequest(_('Public registration is disabled.'))
 
-    user_model = get_user_model()
-    user = user_model(username=username,
-                      email=email,
-                      full_name=full_name,
-                      email_token=str(uuid.uuid4()),
-                      new_email=email,
-                      verified_email=False,
-                      read_new_terms=True)
-
-    user.set_password(password)
-    try:
-        user.save()
-    except IntegrityError:
-        raise exc.WrongArguments(_("Error while creating new user."))
-
-    membership = get_membership_by_token(token)
-    membership.user = user
-    membership.save(update_fields=["user"])
-    send_register_email(user)
-    user_registered_signal.send(sender=user.__class__, user=user)
-
-    return user
+    # Pol Alcoverro: comentado codigo por conservar el flujo original sin ejecutarlo.
+    # is_registered, reason = is_user_already_registered(username=username, email=email)
+    # if is_registered:
+    #     raise exc.WrongArguments(reason)
+    #
+    # user_model = get_user_model()
+    # user = user_model(username=username,
+    #                   email=email,
+    #                   full_name=full_name,
+    #                   email_token=str(uuid.uuid4()),
+    #                   new_email=email,
+    #                   verified_email=False,
+    #                   read_new_terms=True)
+    #
+    # user.set_password(password)
+    # try:
+    #     user.save()
+    # except IntegrityError:
+    #     raise exc.WrongArguments(_('Error while creating new user.'))
+    #
+    # membership = get_membership_by_token(token)
+    # membership.user = user
+    # membership.save(update_fields=["user"])
+    # send_register_email(user)
+    # user_registered_signal.send(sender=user.__class__, user=user)
+    #
+    # return user
