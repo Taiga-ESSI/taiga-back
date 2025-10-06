@@ -53,7 +53,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'taiga',
         'USER': 'taiga',
-        'PASSWORD': 'taiga',
+    # Local TFG environment uses taigaupc as default password.
+    'PASSWORD': 'taigaupc',
         'HOST': 'localhost',
         'PORT': '5432',
     }

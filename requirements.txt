@@ -26,6 +26,8 @@ cairocffi==1.4.0
     # via cairosvg
 cairosvg==2.6.0
     # via -r requirements.in
+cachetools==5.3.1
+    # via google-auth
 celery==5.2.7
     # via -r requirements.in
 certifi==2022.12.7
@@ -88,6 +90,8 @@ djmail==2.0.0
 docopt==0.6.2
     # via psd-tools
 easy-thumbnails==2.8.5
+    # via -r requirements.in
+google-auth==2.29.0
     # via -r requirements.in
 gunicorn==20.1.0
     # via -r requirements.in
@@ -155,6 +159,14 @@ pygments==2.14.0
     # via -r requirements.in
 pyjwt==2.6.0
     # via oauthlib
+pyasn1==0.5.1
+    # via
+    #   pyasn1-modules
+    #   rsa
+pyasn1-modules==0.3.0
+    # via
+    #   google-auth
+    #   rsa
 pymdown-extensions==9.9.2
     # via -r requirements.in
 python-dateutil==2.7.5
@@ -186,6 +198,8 @@ requests-oauthlib==1.3.1
     # via
     #   -r requirements.in
     #   asana
+rsa==4.9
+    # via google-auth
 rudder-sdk-python==1.0.0b1
     # via -r requirements.in
 sampledata==0.3.7

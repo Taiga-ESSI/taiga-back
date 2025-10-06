@@ -6,6 +6,7 @@
 # Copyright (c) 2021-present Kaleidos INC
 #
 
+import logging
 from typing import Callable
 import uuid
 
@@ -15,6 +16,7 @@ from django.contrib.auth.models import update_last_login
 from django.db import IntegrityError
 from django.db import transaction as tx
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ImproperlyConfigured
 
 from taiga.base import exceptions as exc
 from taiga.base.mails import mail_builder
@@ -34,6 +36,8 @@ from .signals import user_registered as user_registered_signal
 #####################
 
 auth_plugins = {}
+_auth_plugins_initialized = False
+logger = logging.getLogger(__name__)
 
 
 def register_auth_plugin(name: str, login_func: Callable):
@@ -42,7 +46,24 @@ def register_auth_plugin(name: str, login_func: Callable):
     }
 
 
+def _ensure_auth_plugins_loaded():
+    global _auth_plugins_initialized
+    if _auth_plugins_initialized:
+        return
+
+    try:
+        config = getattr(settings, "GOOGLE_AUTH", {})
+        if config.get("ENABLED"):
+            from .providers import google  # noqa: F401
+    except (ImportError, ImproperlyConfigured) as exc_import:
+        logger.exception("Google authentication plugin enabled but misconfigured")
+        raise exc.BadRequest(_("Google authentication is not properly configured.")) from exc_import
+
+    _auth_plugins_initialized = True
+
+
 def get_auth_plugins():
+    _ensure_auth_plugins_loaded()
     return auth_plugins
 
 
