@@ -146,6 +146,7 @@ def _create_user_from_payload(email: str, payload: dict):
     return user
 
 
+# Pol Alcoverro: punto de entrada del login mediante Google Identity Services.
 def login_with_google(request):
     raw_token = request.DATA.get("credential") or request.DATA.get("id_token")
     client_hint = request.DATA.get("client_id")

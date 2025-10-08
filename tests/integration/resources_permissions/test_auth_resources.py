@@ -5,6 +5,8 @@
 #
 # Copyright (c) 2021-present Kaleidos INC
 
+# Pol Alcoverro
+
 from django.urls import reverse
 
 from taiga.base.utils import json
@@ -13,7 +15,10 @@ from tests import factories as f
 from tests.utils import disconnect_signals, reconnect_signals
 
 import pytest
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.skip(reason="Pol Alcoverro: Classic login and registration resources disabled in Google SSO build."),
+]
 
 
 def setup_module(module):

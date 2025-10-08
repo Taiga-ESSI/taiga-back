@@ -5,6 +5,8 @@
 #
 # Copyright (c) 2021-present Kaleidos INC
 
+# Pol Alcoverro
+
 import pytest
 
 from django.urls import reverse
@@ -12,7 +14,10 @@ from django.core import mail
 
 from .. import factories
 
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.skip(reason="Pol Alcoverro: Classic login and registration disabled in Google SSO build."),
+]
 
 
 @pytest.fixture
@@ -492,4 +497,3 @@ def test_login_fail_throttling(client, settings):
     assert response.status_code == 429, response.data
 
     settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["login-fail"] = None
-

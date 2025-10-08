@@ -91,6 +91,7 @@ docopt==0.6.2
     # via psd-tools
 easy-thumbnails==2.8.5
     # via -r requirements.in
+# Pol Alcoverro: dependencia para validar tokens Google.
 google-auth==2.29.0
     # via -r requirements.in
 gunicorn==20.1.0

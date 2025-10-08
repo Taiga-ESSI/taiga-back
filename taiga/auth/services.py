@@ -54,6 +54,7 @@ def _ensure_auth_plugins_loaded():
     try:
         config = getattr(settings, "GOOGLE_AUTH", {})
         if config.get("ENABLED"):
+            # Pol Alcoverro: registro del proveedor de login Google.
             from .providers import google  # noqa: F401
     except (ImportError, ImproperlyConfigured) as exc_import:
         logger.exception("Google authentication plugin enabled but misconfigured")

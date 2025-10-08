@@ -72,6 +72,7 @@ GOOGLE_AUTH_CLIENT_IDS = env_to_list(
 GOOGLE_AUTH_AUTO_CREATE_USERS = env_to_bool("GOOGLE_AUTH_AUTO_CREATE", default=True)
 _google_auth_enabled_flag = env_to_bool("GOOGLE_AUTH_ENABLED", default=bool(GOOGLE_AUTH_CLIENT_IDS))
 
+# Pol Alcoverro: configuración server-side para habilitar el login con Google.
 GOOGLE_AUTH = {
     "ENABLED": bool(GOOGLE_AUTH_CLIENT_IDS) and _google_auth_enabled_flag,
     "CLIENT_IDS": GOOGLE_AUTH_CLIENT_IDS,
