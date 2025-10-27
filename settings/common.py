@@ -11,6 +11,22 @@ import sys
 from datetime import timedelta
 
 
+def env_to_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
+
+
+def env_to_list(name, default=None):
+    value = os.environ.get(name)
+    if value is None:
+        if default is None:
+            return []
+        return [item.strip() for item in default if item and item.strip()]
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 APPEND_SLASH = False
@@ -27,7 +43,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "taiga",
         "USER": "taiga",
-        "PASSWORD": "taiga",
+        "PASSWORD": "taigaupc",
         "HOST": "127.0.0.1"
     }
 }
@@ -43,6 +59,26 @@ CACHES = {
 }
 
 INSTANCE_TYPE = "SRC"
+
+
+GOOGLE_AUTH_ALLOWED_DOMAINS = [domain.lower() for domain in env_to_list(
+    "GOOGLE_AUTH_ALLOWED_DOMAINS",
+    ["upc.edu", "estudiantat.upc.edu"],
+)]
+GOOGLE_AUTH_CLIENT_IDS = env_to_list(
+    "GOOGLE_AUTH_CLIENT_IDS",
+    ["286907234950-enq7c1j4085fbj662otfptqqo24hk93u.apps.googleusercontent.com"],
+)
+GOOGLE_AUTH_AUTO_CREATE_USERS = env_to_bool("GOOGLE_AUTH_AUTO_CREATE", default=True)
+_google_auth_enabled_flag = env_to_bool("GOOGLE_AUTH_ENABLED", default=bool(GOOGLE_AUTH_CLIENT_IDS))
+
+# Pol Alcoverro: configuración server-side para habilitar el login con Google.
+GOOGLE_AUTH = {
+    "ENABLED": bool(GOOGLE_AUTH_CLIENT_IDS) and _google_auth_enabled_flag,
+    "CLIENT_IDS": GOOGLE_AUTH_CLIENT_IDS,
+    "ALLOWED_DOMAINS": GOOGLE_AUTH_ALLOWED_DOMAINS,
+    "AUTO_CREATE_USERS": GOOGLE_AUTH_AUTO_CREATE_USERS,
+}
 
 # CELERY
 CELERY_ENABLED = False
