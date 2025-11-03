@@ -57,6 +57,35 @@ CACHES = {
         "LOCATION": "unique-snowflake"
     }
 }
+# Pol Alcoverro: Added for Learning Dashboard Metrics integration
+# Learning Dashboard Metrics integration defaults
+# IMPORTANT: LD-Taiga backend runs on port 3000 by default (see LD-Taiga-backend/index.js)
+# TEMPORAL!
+LD_TAIGA_BACKEND_URL = os.environ.get("LD_TAIGA_BACKEND_URL", "http://gessi-dashboard.essi.upc.edu:8888")
+try:
+    LD_TAIGA_TIMEOUT = int(os.environ.get("LD_TAIGA_TIMEOUT", "15"))
+except (TypeError, ValueError):
+    LD_TAIGA_TIMEOUT = 15
+
+LD_METRICS_EXTERNAL_IDS = [
+    "AMEP11Beats",
+    "AMEP11ChopChop",
+    "AMEP11UniMatch",
+    "AMEP11Unimatch",
+    "AMEP12Academy4All",
+    "AMEP21Cano3",
+    "AMEP21Krunkillos",
+    "AMEP21Sportifiers",
+    "AMEP21SportifyCoach",
+    "AMEP22GoRace",
+    "AMEP22TicketMonster",
+    "AMEP22TicketMonsterTM",
+    "LD_TEST_Project",
+    "Test",
+    "it12b",
+    "it12c",
+    "it12d",
+]
 
 INSTANCE_TYPE = "SRC"
 
@@ -231,9 +260,10 @@ SITE_ID = "api"
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 # SESSION_COOKIE_AGE = 1209600  # (2 weeks) and set SESSION_EXPIRE_AT_BROWSER_CLOSE to false
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_SECURE = True
+# Set to False for development (localhost uses HTTP)
+SESSION_COOKIE_SECURE = False  # Change to True in production with HTTPS
 CSRF_COOKIE_AGE = None
-CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = False  # Change to True in production with HTTPS
 
 # MAIL OPTIONS
 DEFAULT_FROM_EMAIL = "john@doe.com"
@@ -550,6 +580,16 @@ APP_EXTRA_EXPOSE_HEADERS = [
     "taiga-info-project-memberships",
     "taiga-info-project-is-private",
     "taiga-info-order-updated"
+]
+
+# Pol Alcoverro: CORS allowed origins whitelist (see taiga.base.middleware.cors)
+# When using credentials, the middleware will echo back the requesting origin
+# if it's in this whitelist. Localhost origins are automatically allowed.
+CORS_ALLOWED_ORIGINS_WHITELIST = [
+    "http://localhost:9001",
+    "http://localhost:8000",
+    "http://127.0.0.1:9001",
+    "http://127.0.0.1:8000",
 ]
 
 DEFAULT_PROJECT_TEMPLATE = "scrum"

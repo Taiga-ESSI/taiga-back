@@ -254,6 +254,10 @@ router.register(r"timeline/profile", ProfileTimeline, base_name="profile-timelin
 router.register(r"timeline/user", UserTimeline, base_name="user-timeline")
 router.register(r"timeline/project", ProjectTimeline, base_name="project-timeline")
 
+# Pol Alcoverro added - Metrics
+from taiga.projects.metrics.api import MetricsViewSet
+
+router.register(r"metrics", MetricsViewSet, base_name="metrics")
 
 # Webhooks
 from taiga.webhooks.api import WebhookViewSet
