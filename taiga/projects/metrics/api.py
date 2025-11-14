@@ -212,8 +212,18 @@ class MetricsViewSet(ReadOnlyListViewSet):
         # gessi-dashboard API endpoints
         # All use ?prj=PROJECT_ID format
         endpoints = {
-            "metrics": "/api/metrics/current",
-            "students": "/api/metrics/students",
+            "metrics": {
+                "path": "/api/metrics/current",
+                "params": {"prj": external_project_id}
+            },
+            "students": {
+                "path": "/api/metrics/students",
+                "params": {"prj": external_project_id}
+            },
+            "metrics_categories": {
+                "path": "/api/metrics/categories",
+                "params": None
+            },
         }
 
         aggregated = {}
@@ -223,8 +233,8 @@ class MetricsViewSet(ReadOnlyListViewSet):
             try:
                 backend_response = self._request_backend(
                     "get",
-                    endpoint,
-                    params={"prj": external_project_id}
+                    endpoint["path"],
+                    params=endpoint.get("params")
                 )
             except requests.RequestException as exc:
                 aggregated[key] = []
@@ -261,6 +271,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
             "external_project_id": external_project_id,
             "metrics": aggregated.get("metrics", []),
             "students": aggregated.get("students", []),
+            "metrics_categories": aggregated.get("metrics_categories", []),
             "errors": {k: v for k, v in errors.items() if v},
             "is_new_project": not has_data,
         }
