@@ -23,6 +23,7 @@ from taiga.base.decorators import list_route
 from taiga.projects.models import Project
 
 from . import permissions
+from .internal import get_or_build_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
     LD_TAIGA_BACKEND_URL = getattr(settings, "LD_TAIGA_BACKEND_URL", "http://gessi-dashboard.essi.upc.edu:8888")
     LD_TAIGA_TIMEOUT = getattr(settings, "LD_TAIGA_TIMEOUT", 15)
     SESSION_KEY = "ld_metrics_auth"
+    DEFAULT_PROVIDER = getattr(settings, "METRICS_PROVIDER", "external")
 
     ##########################################################################
     # Helper methods
@@ -97,6 +99,24 @@ class MetricsViewSet(ReadOnlyListViewSet):
         except ValueError:
             return None
 
+    def _resolve_provider(self, request):
+        """
+        Determines which provider should be used for the current request.
+        Query param / body param `source` can override the configured default.
+        """
+        source = None
+        if hasattr(request, "DATA"):
+            source = request.DATA.get("source")
+        if not source:
+            source = request.QUERY_PARAMS.get("source")
+
+        if isinstance(source, str):
+            source = source.strip().lower()
+            if source in {"internal", "external"}:
+                return source
+
+        return (self.DEFAULT_PROVIDER or "external").lower()
+
     ##########################################################################
     # Authentication endpoints
     ##########################################################################
@@ -107,6 +127,21 @@ class MetricsViewSet(ReadOnlyListViewSet):
         gessi-dashboard doesn't have a /login endpoint, so we validate
         by attempting to fetch metrics for the project.
         """
+        provider = self._resolve_provider(request)
+
+        if provider == "internal":
+            if not request.user.is_authenticated:
+                return response.Unauthorized({"error": "METRICS.ERROR_AUTH_REQUIRED"})
+
+            username = request.DATA.get("username") or request.user.username
+            external_project = request.DATA.get("project") or request.DATA.get("external") or request.user.username
+            self._store_session_auth(request, username, external_project_id=external_project)
+            return response.Ok({
+                "status": "authenticated",
+                "username": username,
+                "provider": provider,
+            })
+
         if not request.user.is_authenticated:
             return response.Unauthorized({"error": "METRICS.ERROR_AUTH_REQUIRED"})
 
@@ -160,6 +195,13 @@ class MetricsViewSet(ReadOnlyListViewSet):
     @list_route(methods=["POST"])
     def logout(self, request, **kwargs):
         """Clear the metrics authentication session"""
+        provider = self._resolve_provider(request)
+
+        if provider == "internal":
+            if self.SESSION_KEY in request.session:
+                self._clear_session_auth(request)
+            return response.Ok({"status": "logged_out", "provider": provider})
+
         if not request.user.is_authenticated:
             return response.Unauthorized({"error": "METRICS.ERROR_AUTH_REQUIRED"})
 
@@ -169,6 +211,18 @@ class MetricsViewSet(ReadOnlyListViewSet):
     @list_route(methods=["GET"])
     def status(self, request, **kwargs):
         """Return the current authentication status for metrics"""
+        provider = self._resolve_provider(request)
+
+        if provider == "internal":
+            if not request.user.is_authenticated:
+                return response.Ok({"authenticated": False, "username": None, "provider": provider})
+            return response.Ok({
+                "authenticated": True,
+                "username": request.user.username,
+                "external_project_id": request.user.username,
+                "provider": provider,
+            })
+
         if not request.user.is_authenticated:
             return response.Ok({"authenticated": False, "username": None})
 
@@ -187,10 +241,12 @@ class MetricsViewSet(ReadOnlyListViewSet):
     ##########################################################################
     def list(self, request, *args, **kwargs):
         """
-        Get metrics for a specific project from gessi-dashboard.
+        Get metrics for a specific project from the chosen provider.
         Query params:
             - project: Taiga project slug (required)
             - external: optional external project identifier override
+            - source: optional provider override (internal/external)
+            - refresh: truthy flag to force regeneration of internal snapshots
         """
         project_slug = request.QUERY_PARAMS.get("project")
         if not project_slug:
@@ -198,6 +254,23 @@ class MetricsViewSet(ReadOnlyListViewSet):
 
         project = get_object_or_404(Project, slug=project_slug)
         self.check_permissions(request, "list", project)
+
+        provider = self._resolve_provider(request)
+
+        if provider == "internal":
+            refresh_flag = (request.QUERY_PARAMS.get("refresh") or "").lower()
+            force_refresh = refresh_flag in ("1", "true", "yes")
+            snapshot = get_or_build_snapshot(
+                project,
+                use_cache=not force_refresh,
+                force=force_refresh,
+            )
+            payload = dict(snapshot.payload or {})
+            payload.setdefault("project_slug", project_slug)
+            payload.setdefault("project_name", project.name)
+            payload.setdefault("external_project_id", payload.get("external_project_id") or project.slug)
+            payload["provider"] = provider
+            return response.Ok(payload)
 
         auth_state = self._ensure_authenticated(request)
         if not auth_state:
@@ -274,6 +347,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
             "metrics_categories": aggregated.get("metrics_categories", []),
             "errors": {k: v for k, v in errors.items() if v},
             "is_new_project": not has_data,
+            "provider": provider,
         }
 
         return response.Ok(response_payload)
@@ -289,6 +363,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
         Query params:
             - project: Taiga project slug (required)
             - external: optional external project identifier override
+            - source: optional provider override (internal/external)
         """
         project_slug = request.QUERY_PARAMS.get("project")
         if not project_slug:
@@ -296,6 +371,26 @@ class MetricsViewSet(ReadOnlyListViewSet):
 
         project = get_object_or_404(Project, slug=project_slug)
         self.check_permissions(request, "historical", project)
+
+        provider = self._resolve_provider(request)
+
+        if provider == "internal":
+            refresh_flag = (request.QUERY_PARAMS.get("refresh") or "").lower()
+            force_refresh = refresh_flag in ("1", "true", "yes")
+            snapshot = get_or_build_snapshot(
+                project,
+                use_cache=not force_refresh,
+                force=force_refresh,
+            )
+            payload = {
+                "project_slug": project_slug,
+                "project_name": project.name,
+                "external_project_id": (snapshot.payload or {}).get("external_project_id") or project.slug,
+                "historical_data": snapshot.historical_payload or {},
+                "errors": {},
+                "provider": provider,
+            }
+            return response.Ok(payload)
 
         auth_state = self._ensure_authenticated(request)
         if not auth_state:
