@@ -99,6 +99,54 @@ class MetricsViewSet(ReadOnlyListViewSet):
         except ValueError:
             return None
 
+    @staticmethod
+    def _enrich_metrics_with_catalog(metrics_list, catalog):
+        """
+        Attach metadata (like category names) from the metrics catalog endpoint
+        to the live metrics payload fetched from /api/metrics/current.
+        """
+        if not metrics_list or not catalog:
+            return
+
+        if isinstance(catalog, dict):
+            catalog_entries = catalog.get("results")
+            if isinstance(catalog_entries, list):
+                entries = catalog_entries
+            else:
+                entries = [catalog]
+        elif isinstance(catalog, list):
+            entries = catalog
+        else:
+            return
+
+        category_map = {}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            external_id = entry.get("externalId") or entry.get("id")
+            if not external_id:
+                continue
+            normalized_id = str(external_id).strip().lower()
+            if not normalized_id:
+                continue
+            category_name = entry.get("categoryName") or entry.get("category")
+            if category_name:
+                category_map[normalized_id] = category_name
+
+        if not category_map:
+            return
+
+        for metric in metrics_list:
+            metric_id = metric.get("id")
+            if not metric_id:
+                continue
+            lookup = str(metric_id).strip().lower()
+            if not lookup:
+                continue
+            category_name = category_map.get(lookup)
+            if category_name:
+                metric["categoryName"] = category_name
+
     def _resolve_provider(self, request):
         """
         Determines which provider should be used for the current request.
@@ -295,7 +343,11 @@ class MetricsViewSet(ReadOnlyListViewSet):
             },
             "metrics_categories": {
                 "path": "/api/metrics/categories",
-                "params": None
+                "params": {"prj": external_project_id}
+            },
+            "metrics_catalog": {
+                "path": "/api/metrics",
+                "params": {"prj": external_project_id}
             },
         }
 
@@ -332,6 +384,12 @@ class MetricsViewSet(ReadOnlyListViewSet):
                     "detail": payload or backend_response.text
                 }
 
+        # Attach metadata (category names, etc.) coming from /api/metrics
+        self._enrich_metrics_with_catalog(
+            aggregated.get("metrics"),
+            aggregated.get("metrics_catalog"),
+        )
+
         # Check if project has any data
         has_data = any(
             aggregated.get(key) and len(aggregated[key]) > 0
@@ -345,6 +403,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
             "metrics": aggregated.get("metrics", []),
             "students": aggregated.get("students", []),
             "metrics_categories": aggregated.get("metrics_categories", []),
+            "metrics_catalog": aggregated.get("metrics_catalog", []),
             "errors": {k: v for k, v in errors.items() if v},
             "is_new_project": not has_data,
             "provider": provider,
