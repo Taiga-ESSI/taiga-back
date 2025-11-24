@@ -24,6 +24,7 @@ from taiga.projects.models import Project
 
 from . import permissions
 from .internal import get_or_build_snapshot
+from .models import ProjectMetricsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,156 @@ class MetricsViewSet(ReadOnlyListViewSet):
                 return source
 
         return (self.DEFAULT_PROVIDER or "external").lower()
+
+    def _get_or_create_project_config(self, project):
+        defaults = {
+            "provider": self._normalize_provider_value(self.DEFAULT_PROVIDER)
+                         or ProjectMetricsConfig.PROVIDER_EXTERNAL,
+        }
+        config, _ = ProjectMetricsConfig.objects.get_or_create(
+            project=project,
+            defaults=defaults,
+        )
+        return config
+
+    @staticmethod
+    def _normalize_provider_value(value):
+        if not value:
+            return None
+        provider = str(value).strip().lower()
+        if provider in {"internal", "external"}:
+            return provider
+        return None
+
+    @staticmethod
+    def _sanitize_classification_map(data):
+        if not isinstance(data, dict):
+            return {}
+
+        allowed_values = {"project", "team", "hidden"}
+        clean = {}
+        for metric_id, kind in data.items():
+            if metric_id is None:
+                continue
+            normalized_id = str(metric_id).strip()
+            if not normalized_id:
+                continue
+            if isinstance(kind, str):
+                lowered = kind.strip().lower()
+            else:
+                lowered = None
+            if lowered not in allowed_values:
+                continue
+            clean[normalized_id] = lowered
+        return clean
+
+    @staticmethod
+    def _sanitize_order_list(raw):
+        if not isinstance(raw, (list, tuple)):
+            return []
+        cleaned = []
+        seen = set()
+        for item in raw:
+            if item is None:
+                continue
+            entry = str(item).strip()
+            if not entry or entry in seen:
+                continue
+            seen.add(entry)
+            cleaned.append(entry)
+        return cleaned
+
+    def _serialize_project_config(self, project, config):
+        updated_by = None
+        if config.updated_by:
+            updated_by = {
+                "id": config.updated_by_id,
+                "username": config.updated_by.username,
+                "full_name": config.updated_by.get_full_name() or config.updated_by.username,
+            }
+
+        return {
+            "project": project.slug,
+            "project_id": project.id,
+            "provider": config.provider or ProjectMetricsConfig.PROVIDER_EXTERNAL,
+            "external_project_id": config.external_project_id or "",
+            "classification": config.classification or {},
+            "project_metrics_order": config.project_metrics_order or [],
+            "team_metrics_order": config.team_metrics_order or [],
+            "updated_at": config.updated_at,
+            "updated_by": updated_by,
+        }
+
+    ##########################################################################
+    # Configuration endpoints
+    ##########################################################################
+    @list_route(methods=["GET", "PATCH"])
+    def config(self, request, **kwargs):
+        project_slug = None
+        if request.method == "PATCH" and request.DATA:
+            project_slug = request.DATA.get("project")
+        if not project_slug:
+            project_slug = request.QUERY_PARAMS.get("project")
+
+        if not project_slug:
+            return response.BadRequest({"error": "METRICS.ERROR_PROJECT_REQUIRED"})
+
+        project = get_object_or_404(Project, slug=project_slug)
+
+        if request.method == "GET":
+            self.check_permissions(request, "config", project)
+            config = self._get_or_create_project_config(project)
+            return response.Ok(self._serialize_project_config(project, config))
+
+        self.check_permissions(request, "config_update", project)
+        payload = request.DATA or {}
+        config = self._get_or_create_project_config(project)
+
+        changed = False
+
+        provider_value = self._normalize_provider_value(payload.get("provider"))
+        if provider_value and provider_value != config.provider:
+            config.provider = provider_value
+            changed = True
+
+        external_id = (
+            payload.get("external_project_id")
+            or payload.get("externalProjectId")
+            or payload.get("external")
+        )
+        if external_id is not None:
+            normalized_external = str(external_id).strip()
+            if normalized_external != config.external_project_id:
+                config.external_project_id = normalized_external
+                changed = True
+
+        classification = payload.get("classification")
+        if classification is not None:
+            clean_map = self._sanitize_classification_map(classification)
+            if clean_map != (config.classification or {}):
+                config.classification = clean_map
+                changed = True
+
+        project_order = payload.get("project_metrics_order") or payload.get("projectMetricsOrder")
+        if project_order is not None:
+            clean_project_order = self._sanitize_order_list(project_order)
+            if clean_project_order != (config.project_metrics_order or []):
+                config.project_metrics_order = clean_project_order
+                changed = True
+
+        team_order = payload.get("team_metrics_order") or payload.get("teamMetricsOrder")
+        if team_order is not None:
+            clean_team_order = self._sanitize_order_list(team_order)
+            if clean_team_order != (config.team_metrics_order or []):
+                config.team_metrics_order = clean_team_order
+                changed = True
+
+        if changed:
+            if request.user.is_authenticated:
+                config.updated_by = request.user
+            config.save()
+
+        return response.Ok(self._serialize_project_config(project, config))
 
     ##########################################################################
     # Authentication endpoints
