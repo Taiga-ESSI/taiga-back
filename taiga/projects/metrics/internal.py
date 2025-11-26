@@ -302,10 +302,10 @@ class InternalMetricsCalculator:
             closed_stories = row["closed_stories"] or 0
 
             student_metrics = [
-                self._student_metric(username, "assignedtasks", "Tareas asignadas", assigned_tasks),
-                self._student_metric(username, "closedtasks", "Tareas cerradas", closed_tasks),
-                self._student_metric(username, "totalus", "Historias asignadas", assigned_stories),
-                self._student_metric(username, "completedus", "Historias finalizadas", closed_stories),
+                self._student_metric(username, full_name, "assignedtasks", "Tareas asignadas", assigned_tasks),
+                self._student_metric(username, full_name, "closedtasks", "Tareas cerradas", closed_tasks),
+                self._student_metric(username, full_name, "totalus", "Historias asignadas", assigned_stories),
+                self._student_metric(username, full_name, "completedus", "Historias finalizadas", closed_stories),
             ]
 
             metric_entries.extend(student_metrics)
@@ -322,17 +322,27 @@ class InternalMetricsCalculator:
 
         return students, metric_entries
 
-    def _student_metric(self, username: str, metric_key: str, label: str, value: float) -> Dict:
+    def _student_metric(self, username: str, display_name: str, metric_key: str, label: str, value: float) -> Dict:
         """
         Helper that formats per-student metrics so they look identical to the
         Learning Dashboard payload.
         """
+        display = display_name or username
         return {
             "id": f"{metric_key}_{username}",
-            "name": label,
+            "name": f"{label} · {display}" if display else label,
             "value": float(value or 0),
+            "value_description": str(value) if value is not None else None,
+            "description": f"{label} de {display}" if display else label,
             "qualityFactors": ["Team"],
             "date": timezone.now().isoformat(),
+            "student": username,
+            "student_display": display,
+            "metadata": {
+                "student": username,
+                "student_display": display,
+                "metric": metric_key,
+            },
         }
 
     # ------------------------------------------------------------------ #
