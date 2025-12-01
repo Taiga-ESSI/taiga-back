@@ -67,7 +67,6 @@ class InternalMetricsCalculator:
             self._metric_task_completion(),
             self._metric_user_story_completion(),
             self._metric_issue_resolution(),
-            self._metric_cycle_time(),
         ]
         metrics = [metric for metric in metrics if metric]
 
@@ -143,6 +142,8 @@ class InternalMetricsCalculator:
                 "recent_closed": recent_closed,
             },
         }
+    
+    
 
     def _metric_user_story_completion(self) -> Optional[Dict]:
         """
@@ -214,41 +215,6 @@ class InternalMetricsCalculator:
                 "closed": closed,
                 "recent_closed": recent_closed,
             },
-        }
-
-    def _metric_cycle_time(self) -> Optional[Dict]:
-        """
-        KPI: Tiempo medio de ciclo (Project)
-        - Source: tasks_task con finished_date y status cerrado.
-        - Meaning: días promedio entre creación y cierre de tareas.
-        - Nota: si los datos de muestra tienen finished_date < created_date saldrá negativo.
-        """
-        sql = """
-            SELECT
-                AVG(EXTRACT(EPOCH FROM (t.finished_date - t.created_date)) / 86400.0)
-                AS avg_days
-            FROM tasks_task t
-            LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
-            WHERE
-                t.project_id = %s
-                AND ts.is_closed
-                AND t.finished_date IS NOT NULL
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id])
-            row = _dictfetchone(cursor)
-
-        avg_days = row.get("avg_days")
-        if avg_days is None:
-            return None
-
-        return {
-            "id": f"cycle_time_{self.project.slug}",
-            "name": "Tiempo medio de ciclo",
-            "value": round(float(avg_days), 2),
-            "value_description": f"{round(float(avg_days), 2)} días",
-            "description": "Duración media entre la creación y el cierre de una tarea.",
-            "qualityFactors": ["Delivery"],
         }
 
     # ------------------------------------------------------------------ #
@@ -350,10 +316,16 @@ class InternalMetricsCalculator:
     # ------------------------------------------------------------------ #
     def _build_metric_categories(self) -> List[Dict]:
         return [
-            {"name": "Delivery", "upperThreshold": 50, "color": "#2563EB", "type": "percentage"},
-            {"name": "Delivery", "upperThreshold": 80, "color": "#10B981", "type": "percentage"},
-            {"name": "Planning", "upperThreshold": 80, "color": "#F59E0B", "type": "percentage"},
-            {"name": "Quality", "upperThreshold": 80, "color": "#EC4899", "type": "percentage"},
+            # Shared palette: rojo (mal) -> ámbar (mejora) -> verde (OK)
+            {"name": "Delivery", "upperThreshold": 0.5, "color": "#EF4444", "type": "percentage"},
+            {"name": "Delivery", "upperThreshold": 0.8, "color": "#F59E0B", "type": "percentage"},
+            {"name": "Delivery", "upperThreshold": 1.0, "color": "#22C55E", "type": "percentage"},
+            {"name": "Planning", "upperThreshold": 0.5, "color": "#EF4444", "type": "percentage"},
+            {"name": "Planning", "upperThreshold": 0.8, "color": "#F59E0B", "type": "percentage"},
+            {"name": "Planning", "upperThreshold": 1.0, "color": "#22C55E", "type": "percentage"},
+            {"name": "Quality", "upperThreshold": 0.5, "color": "#EF4444", "type": "percentage"},
+            {"name": "Quality", "upperThreshold": 0.8, "color": "#F59E0B", "type": "percentage"},
+            {"name": "Quality", "upperThreshold": 1.0, "color": "#22C55E", "type": "percentage"},
             {"name": "Team", "upperThreshold": 100, "color": "#8B5CF6", "type": "absolute"},
         ]
 
