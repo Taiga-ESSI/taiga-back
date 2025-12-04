@@ -148,15 +148,17 @@ class InternalMetricsCalculator:
     def _metric_user_story_completion(self) -> Optional[Dict]:
         """
         KPI: Historias completadas (Project)
-        - Source: userstories_userstory + projects_userstorystatus.is_closed
+        - Source: userstories_userstory.is_closed
         - Meaning: ratio de user stories cerradas vs total en el proyecto.
+        - Nota: Se usa us.is_closed porque Taiga puede cerrar historias
+                automáticamente cuando todas sus tareas están cerradas,
+                sin cambiar el status a uno con is_closed=True.
         """
         sql = """
             SELECT
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE st.is_closed) AS closed
+                COUNT(*) FILTER (WHERE us.is_closed) AS closed
             FROM userstories_userstory us
-            LEFT JOIN projects_userstorystatus st ON st.id = us.status_id
             WHERE us.project_id = %s
         """
         with connection.cursor() as cursor:
@@ -240,13 +242,12 @@ class InternalMetricsCalculator:
                 COUNT(t.id) FILTER (WHERE t.assigned_to_id = u.id) AS assigned_tasks,
                 COUNT(t.id) FILTER (WHERE t.assigned_to_id = u.id AND ts.is_closed) AS closed_tasks,
                 COUNT(us.id) FILTER (WHERE us.assigned_to_id = u.id) AS assigned_stories,
-                COUNT(us.id) FILTER (WHERE us.assigned_to_id = u.id AND uss.is_closed) AS closed_stories
+                COUNT(us.id) FILTER (WHERE us.assigned_to_id = u.id AND us.is_closed) AS closed_stories
             FROM projects_membership m
             JOIN users_user u ON u.id = m.user_id
             LEFT JOIN tasks_task t ON t.project_id = m.project_id AND t.assigned_to_id = u.id
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             LEFT JOIN userstories_userstory us ON us.project_id = m.project_id AND us.assigned_to_id = u.id
-            LEFT JOIN projects_userstorystatus uss ON uss.id = us.status_id
             WHERE m.project_id = %s AND m.user_id IS NOT NULL
             GROUP BY u.id, u.username, full_name
             ORDER BY full_name ASC
