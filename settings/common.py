@@ -89,6 +89,12 @@ LD_METRICS_EXTERNAL_IDS = [
 
 INSTANCE_TYPE = "SRC"
 
+METRICS_PROVIDER = os.environ.get("TAIGA_METRICS_PROVIDER", "external").lower()
+try:
+    METRICS_INTERNAL_SNAPSHOT_TTL_MINUTES = int(os.environ.get("TAIGA_METRICS_SNAPSHOT_TTL", "60"))
+except (TypeError, ValueError):
+    METRICS_INTERNAL_SNAPSHOT_TTL_MINUTES = 60
+
 
 GOOGLE_AUTH_ALLOWED_DOMAINS = [domain.lower() for domain in env_to_list(
     "GOOGLE_AUTH_ALLOWED_DOMAINS",
@@ -410,6 +416,7 @@ INSTALLED_APPS = [
     "taiga.projects.wiki",
     "taiga.projects.contact",
     "taiga.projects.settings",
+    "taiga.projects.metrics",
     "taiga.searches",
     "taiga.timeline",
     "taiga.mdrender",
