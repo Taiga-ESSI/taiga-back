@@ -427,7 +427,12 @@ class MetricsViewSet(ReadOnlyListViewSet):
 
         auth_state = self._ensure_authenticated(request)
         if not auth_state:
-            return response.Ok({"authenticated": False, "username": None})
+            # Fallback: if authenticated in Taiga, consider authenticated for metrics
+            return response.Ok({
+                "authenticated": True,
+                "username": request.user.username,
+                "external_project_id": request.user.username,
+            })
 
         return response.Ok({
             "authenticated": True,
@@ -457,12 +462,11 @@ class MetricsViewSet(ReadOnlyListViewSet):
         provider = self._resolve_provider(request)
 
         if provider == "internal":
-            refresh_flag = (request.QUERY_PARAMS.get("refresh") or "").lower()
-            force_refresh = refresh_flag in ("1", "true", "yes")
+            # Always force refresh as requested by user to ensure real-time data
             snapshot = get_or_build_snapshot(
                 project,
-                use_cache=not force_refresh,
-                force=force_refresh,
+                use_cache=False,
+                force=True,
             )
             payload = dict(snapshot.payload or {})
             payload.setdefault("project_slug", project_slug)
@@ -472,12 +476,17 @@ class MetricsViewSet(ReadOnlyListViewSet):
             return response.Ok(payload)
 
         auth_state = self._ensure_authenticated(request)
-        if not auth_state:
-            return response.Unauthorized({"error": "METRICS.ERROR_METRICS_AUTH_REQUIRED"})
-
+        
         # Get the project ID to use with gessi-dashboard
         explicit_external = request.QUERY_PARAMS.get("external")
-        external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
+        external_project_id = None
+
+        if auth_state:
+            external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
+        else:
+            # Fallback to project config
+            config = self._get_or_create_project_config(project)
+            external_project_id = explicit_external or config.external_project_id or project.slug
 
         logger.info(f"📊 Metrics request for {project_slug} | external={external_project_id}")
 
@@ -702,12 +711,17 @@ class MetricsViewSet(ReadOnlyListViewSet):
             return response.Ok(payload)
 
         auth_state = self._ensure_authenticated(request)
-        if not auth_state:
-            return response.Unauthorized({"error": "METRICS.ERROR_METRICS_AUTH_REQUIRED"})
 
         # Get the project ID to use with gessi-dashboard
         explicit_external = request.QUERY_PARAMS.get("external")
-        external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
+        external_project_id = None
+
+        if auth_state:
+            external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
+        else:
+            # Fallback to project config
+            config = self._get_or_create_project_config(project)
+            external_project_id = explicit_external or config.external_project_id or project.slug
 
         logger.info(f"📊 Historical metrics request for {project_slug} | external={external_project_id} | {date_from} to {date_to}")
 

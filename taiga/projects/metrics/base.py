@@ -39,10 +39,28 @@ def _dictfetchone(cursor) -> Dict:
 def get_active_sprint(project_id: int) -> Optional[Dict]:
     """
     Returns the active sprint (milestone) for a project.
-    Active = not closed, ordered by estimated_finish date.
-    Returns None if no active sprint exists.
+    Priority:
+    1. Open sprint where today is between estimated_start and estimated_finish.
+    2. First open sprint ordered by estimated_finish.
     """
-    sql = """
+    # 1. Try to find a sprint currently in progress
+    sql_current = """
+        SELECT m.id, m.name, m.estimated_start, m.estimated_finish
+        FROM milestones_milestone m
+        WHERE m.project_id = %s 
+          AND m.closed = FALSE
+          AND m.estimated_start <= CURRENT_DATE
+          AND m.estimated_finish >= CURRENT_DATE
+        LIMIT 1
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(sql_current, [project_id])
+        current = _dictfetchone(cursor)
+        if current:
+            return current
+
+    # 2. Fallback: first open sprint
+    sql_fallback = """
         SELECT m.id, m.name, m.estimated_start, m.estimated_finish
         FROM milestones_milestone m
         WHERE m.project_id = %s 
@@ -51,7 +69,7 @@ def get_active_sprint(project_id: int) -> Optional[Dict]:
         LIMIT 1
     """
     with connection.cursor() as cursor:
-        cursor.execute(sql, [project_id])
+        cursor.execute(sql_fallback, [project_id])
         return _dictfetchone(cursor)
 
 
