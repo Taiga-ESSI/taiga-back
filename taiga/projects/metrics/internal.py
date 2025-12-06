@@ -4,9 +4,17 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 # Copyright (c) 2021-present Kaleidos
+# Author: Pol Alcoverro
 #
 # Internal metrics provider used to calculate Learning Dashboard compatible
 # payloads without depending on the external service.
+#
+# ARCHITECTURE:
+# - base.py: Abstract base classes (BaseMetric, BaseStudentMetric, BaseHistoricalMetric)
+# - metrics_impl.py: Concrete implementations registered via decorators
+# - internal.py (this file): Calculator that orchestrates all metrics
+#
+# To add a new metric, see metrics_impl.py for examples.
 
 from __future__ import annotations
 
@@ -22,21 +30,19 @@ from django.utils import timezone
 from taiga.projects.metrics.models import ProjectMetricsSnapshot
 from taiga.projects.models import Project
 
+# Import to trigger metric registration via decorators
+from taiga.projects.metrics.base import (
+    METRIC_REGISTRY,
+    STUDENT_METRIC_REGISTRY,
+    HISTORICAL_METRIC_REGISTRY,
+    _dictfetchall,
+    _dictfetchone,
+    get_active_sprint,
+)
+import taiga.projects.metrics.metrics_impl  # noqa: F401 - registers metrics
+
 
 DEFAULT_SNAPSHOT_TTL_MINUTES = 60
-
-
-def _dictfetchall(cursor) -> List[Dict]:
-    columns = [col[0] for col in cursor.description] if cursor.description else []
-    return [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-
-def _dictfetchone(cursor) -> Dict:
-    row = cursor.fetchone()
-    if not row:
-        return {}
-    columns = [col[0] for col in cursor.description] if cursor.description else []
-    return dict(zip(columns, row))
 
 
 @dataclass
@@ -47,9 +53,14 @@ class SnapshotResult:
 
 class InternalMetricsCalculator:
     """
-    Encapsulates all the SQL required to compute metrics directly from Taiga's
-    database. Each helper method focuses on a specific KPI so that it can be
-    reused independently and unit tested.
+    Orchestrates all internal metric calculations using registered metric classes.
+    
+    Metrics are auto-discovered from METRIC_REGISTRY and HISTORICAL_METRIC_REGISTRY
+    which are populated by the @register_metric and @register_historical_metric
+    decorators in metrics_impl.py.
+    
+    To add a new metric, simply create a class in metrics_impl.py that extends
+    BaseMetric and decorate it with @register_metric.
     """
 
     def __init__(self, project: Project):
@@ -63,12 +74,8 @@ class InternalMetricsCalculator:
         Creates both the real-time payload and the historical payload so the
         API can serve the same schema as the external Learning Dashboard.
         """
-        metrics = [
-            self._metric_task_completion(),
-            self._metric_user_story_completion(),
-            self._metric_issue_resolution(),
-        ]
-        metrics = [metric for metric in metrics if metric]
+        # Calculate all registered project metrics
+        metrics = self._calculate_all_metrics()
 
         student_metrics, student_metric_entries = self._build_student_metrics()
 
@@ -83,7 +90,6 @@ class InternalMetricsCalculator:
             "metrics": metrics,
             "students": student_metrics,
             "metrics_categories": self._build_metric_categories(),
-            # Not shown in the current UI: keep empty to simplify payload
             "strategic_indicators": [],
             "quality_factors": [],
             "hours": self._build_hours_breakdown(metrics),
@@ -95,167 +101,105 @@ class InternalMetricsCalculator:
 
         return SnapshotResult(payload=payload, historical=historical)
 
-    # ------------------------------------------------------------------ #
-    # Metric builders
-    # ------------------------------------------------------------------ #
-    def _metric_task_completion(self) -> Optional[Dict]:
+    def _calculate_all_metrics(self) -> List[Dict]:
         """
-        KPI: Closed tasks (Project)
-        - Source: tasks_task + projects_taskstatus.is_closed
-        - Meaning: ratio of closed tasks vs total tasks in the project.
-        - Used in: Project metrics cards (tiene metadata.total/closed/recent_closed).
+        Instantiate and calculate all registered metrics.
+        Uses the METRIC_REGISTRY populated by @register_metric decorators.
         """
-        sql = """
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE ts.is_closed) AS closed,
-                COUNT(*) FILTER (
-                    WHERE ts.is_closed AND t.finished_date >= NOW() - INTERVAL '7 days'
-                ) AS recent_closed
-            FROM tasks_task t
-            LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
-            WHERE t.project_id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id])
-            row = _dictfetchone(cursor)
+        metrics = []
+        for metric_class in METRIC_REGISTRY:
+            try:
+                metric_instance = metric_class(self.project)
+                result = metric_instance.calculate()
+                if result:
+                    metrics.append(result)
+            except Exception:
+                # Log error but continue with other metrics
+                pass
+        return metrics
 
-        total = row.get("total") or 0
-        closed = row.get("closed") or 0
-        recent_closed = row.get("recent_closed") or 0
-
-        if total == 0:
-            ratio = 0.0
+    # ------------------------------------------------------------------ #
+    # Student metrics (using registered metric classes)
+    # ------------------------------------------------------------------ #
+    def _build_student_metrics(self) -> tuple[List[Dict], List[Dict]]:
+        """
+        Aggregates metrics per student (membership) using SQL and registered
+        student metric classes from STUDENT_METRIC_REGISTRY.
+        
+        Returns both the student payload and the flattened metric entries
+        that mimic the format of the external Learning Dashboard.
+        """
+        # Get active sprint for filtering
+        sprint = get_active_sprint(self.project.id)
+        
+        if sprint:
+            # Filter by active sprint
+            sql = """
+                SELECT
+                    u.id AS user_id,
+                    u.username,
+                    COALESCE(NULLIF(u.full_name, ''), u.username) AS full_name,
+                    COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id) AS assigned_tasks,
+                    COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id AND ts.is_closed) AS closed_tasks,
+                    COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id AND t.is_blocked) AS blocked_tasks,
+                    COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id) AS assigned_stories,
+                    COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id AND us.is_closed) AS closed_stories,
+                    COUNT(DISTINCT i.id) FILTER (WHERE i.assigned_to_id = u.id) AS assigned_issues,
+                    COUNT(DISTINCT i.id) FILTER (WHERE i.assigned_to_id = u.id AND ist.is_closed) AS closed_issues
+                FROM projects_membership m
+                JOIN users_user u ON u.id = m.user_id
+                LEFT JOIN tasks_task t ON t.project_id = m.project_id 
+                                      AND t.assigned_to_id = u.id 
+                                      AND t.milestone_id = %s
+                LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
+                LEFT JOIN userstories_userstory us ON us.project_id = m.project_id 
+                                                  AND us.assigned_to_id = u.id
+                                                  AND us.milestone_id = %s
+                LEFT JOIN issues_issue i ON i.project_id = m.project_id 
+                                        AND i.assigned_to_id = u.id
+                                        AND i.milestone_id = %s
+                LEFT JOIN projects_issuestatus ist ON ist.id = i.status_id
+                WHERE m.project_id = %s AND m.user_id IS NOT NULL
+                GROUP BY u.id, u.username, full_name
+                ORDER BY full_name ASC
+            """
+            params = [sprint["id"], sprint["id"], sprint["id"], self.project.id]
         else:
-            ratio = closed / float(total)
-
-        return {
-            "id": f"task_completion_{self.project.slug}",
-            "name": "Closed tasks",
-            "value": round(ratio, 4),
-            "value_description": f"{closed}/{total} tasks closed",
-            "description": "Porcentaje de tareas en estado cerrado dentro del proyecto.",
-            "qualityFactors": ["Delivery"],
-            "metadata": {
-                "total": total,
-                "closed": closed,
-                "recent_closed": recent_closed,
-            },
-        }
-    
-    
-
-    def _metric_user_story_completion(self) -> Optional[Dict]:
-        """
-        KPI: Historias completadas (Project)
-        - Source: userstories_userstory.is_closed
-        - Meaning: ratio de user stories cerradas vs total en el proyecto.
-        - Nota: Se usa us.is_closed porque Taiga puede cerrar historias
-                automáticamente cuando todas sus tareas están cerradas,
-                sin cambiar el status a uno con is_closed=True.
-        """
-        sql = """
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE us.is_closed) AS closed
-            FROM userstories_userstory us
-            WHERE us.project_id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id])
-            row = _dictfetchone(cursor)
-
-        total = row.get("total") or 0
-        closed = row.get("closed") or 0
-        ratio = (closed / float(total)) if total else 0.0
-
-        return {
-            "id": f"userstory_completion_{self.project.slug}",
-            "name": "Historias completadas",
-            "value": round(ratio, 4),
-            "value_description": f"{closed}/{total} historias cerradas",
-            "description": "Porcentaje de user stories en estado finalizado.",
-            "qualityFactors": ["Planning"],
-            "metadata": {"total": total, "closed": closed},
-        }
-
-    def _metric_issue_resolution(self) -> Optional[Dict]:
-        """
-        KPI: Incidencias resueltas (Project)
-        - Source: issues_issue + projects_issuestatus.is_closed
-        - Meaning: ratio de issues cerradas vs total en el proyecto (incluye recent_closed 14d).
-        """
-        sql = """
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE st.is_closed) AS closed,
-                COUNT(*) FILTER (
-                    WHERE st.is_closed AND i.finished_date >= NOW() - INTERVAL '14 days'
-                ) AS recent_closed
-            FROM issues_issue i
-            LEFT JOIN projects_issuestatus st ON st.id = i.status_id
-            WHERE i.project_id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id])
-            row = _dictfetchone(cursor)
-
-        total = row.get("total") or 0
-        closed = row.get("closed") or 0
-        recent_closed = row.get("recent_closed") or 0
-        ratio = (closed / float(total)) if total else 0.0
-
-        return {
-            "id": f"issue_resolution_{self.project.slug}",
-            "name": "Incidencias resueltas",
-            "value": round(ratio, 4),
-            "value_description": f"{closed}/{total} issues resueltos",
-            "description": "Estado de resolución de incidencias dentro del proyecto.",
-            "qualityFactors": ["Quality"],
-            "metadata": {
-                "total": total,
-                "closed": closed,
-                "recent_closed": recent_closed,
-            },
-        }
-
-    # ------------------------------------------------------------------ #
-    # Student metrics
-    # ------------------------------------------------------------------ #
-    def _build_student_metrics(self) -> (List[Dict], List[Dict]):
-        """
-        Aggregates metrics per student (membership) using SQL. Returns both the
-        student payload and the flattened metric entries that mimic the format
-        of the external service.
-        KPIs generados (por usuario):
-        - assignedtasks_<user>: tareas asignadas
-        - closedtasks_<user>: tareas cerradas
-        - totalus_<user>: historias asignadas
-        - completedus_<user>: historias finalizadas
-        Estos se usan en Team (radar y comparación).
-        """
-        sql = """
-            SELECT
-                u.id AS user_id,
-                u.username,
-                COALESCE(NULLIF(u.full_name, ''), u.username) AS full_name,
-                COUNT(t.id) FILTER (WHERE t.assigned_to_id = u.id) AS assigned_tasks,
-                COUNT(t.id) FILTER (WHERE t.assigned_to_id = u.id AND ts.is_closed) AS closed_tasks,
-                COUNT(us.id) FILTER (WHERE us.assigned_to_id = u.id) AS assigned_stories,
-                COUNT(us.id) FILTER (WHERE us.assigned_to_id = u.id AND us.is_closed) AS closed_stories
-            FROM projects_membership m
-            JOIN users_user u ON u.id = m.user_id
-            LEFT JOIN tasks_task t ON t.project_id = m.project_id AND t.assigned_to_id = u.id
-            LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
-            LEFT JOIN userstories_userstory us ON us.project_id = m.project_id AND us.assigned_to_id = u.id
-            WHERE m.project_id = %s AND m.user_id IS NOT NULL
-            GROUP BY u.id, u.username, full_name
-            ORDER BY full_name ASC
-        """
+            # No active sprint: show all project data
+            sql = """
+                SELECT
+                    u.id AS user_id,
+                    u.username,
+                    COALESCE(NULLIF(u.full_name, ''), u.username) AS full_name,
+                    COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id) AS assigned_tasks,
+                    COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id AND ts.is_closed) AS closed_tasks,
+                    COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id AND t.is_blocked) AS blocked_tasks,
+                    COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id) AS assigned_stories,
+                    COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id AND us.is_closed) AS closed_stories,
+                    COUNT(DISTINCT i.id) FILTER (WHERE i.assigned_to_id = u.id) AS assigned_issues,
+                    COUNT(DISTINCT i.id) FILTER (WHERE i.assigned_to_id = u.id AND ist.is_closed) AS closed_issues
+                FROM projects_membership m
+                JOIN users_user u ON u.id = m.user_id
+                LEFT JOIN tasks_task t ON t.project_id = m.project_id AND t.assigned_to_id = u.id
+                LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
+                LEFT JOIN userstories_userstory us ON us.project_id = m.project_id AND us.assigned_to_id = u.id
+                LEFT JOIN issues_issue i ON i.project_id = m.project_id AND i.assigned_to_id = u.id
+                LEFT JOIN projects_issuestatus ist ON ist.id = i.status_id
+                WHERE m.project_id = %s AND m.user_id IS NOT NULL
+                GROUP BY u.id, u.username, full_name
+                ORDER BY full_name ASC
+            """
+            params = [self.project.id]
+            
         results: List[Dict] = []
         with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id])
+            cursor.execute(sql, params)
             results = _dictfetchall(cursor)
+
+        # Instantiate all registered student metrics
+        student_metric_instances = [
+            metric_class(self.project) for metric_class in STUDENT_METRIC_REGISTRY
+        ]
 
         students: List[Dict] = []
         metric_entries: List[Dict] = []
@@ -263,17 +207,16 @@ class InternalMetricsCalculator:
         for row in results:
             username = row["username"]
             full_name = row["full_name"]
-            assigned_tasks = row["assigned_tasks"] or 0
-            closed_tasks = row["closed_tasks"] or 0
-            assigned_stories = row["assigned_stories"] or 0
-            closed_stories = row["closed_stories"] or 0
 
-            student_metrics = [
-                self._student_metric(username, full_name, "assignedtasks", "Tareas asignadas", assigned_tasks),
-                self._student_metric(username, full_name, "closedtasks", "Tareas cerradas", closed_tasks),
-                self._student_metric(username, full_name, "totalus", "Historias asignadas", assigned_stories),
-                self._student_metric(username, full_name, "completedus", "Historias finalizadas", closed_stories),
-            ]
+            # Calculate all metrics for this user using registered classes
+            student_metrics = []
+            for metric_instance in student_metric_instances:
+                try:
+                    value = metric_instance.get_value_for_user(row)
+                    metric_dict = metric_instance.build_metric_for_user(username, full_name, value)
+                    student_metrics.append(metric_dict)
+                except Exception:
+                    pass
 
             metric_entries.extend(student_metrics)
 
@@ -288,29 +231,6 @@ class InternalMetricsCalculator:
             )
 
         return students, metric_entries
-
-    def _student_metric(self, username: str, display_name: str, metric_key: str, label: str, value: float) -> Dict:
-        """
-        Helper that formats per-student metrics so they look identical to the
-        Learning Dashboard payload.
-        """
-        display = display_name or username
-        return {
-            "id": f"{metric_key}_{username}",
-            "name": f"{label} · {display}" if display else label,
-            "value": float(value or 0),
-            "value_description": str(value) if value is not None else None,
-            "description": f"{label} de {display}" if display else label,
-            "qualityFactors": ["Team"],
-            "date": timezone.now().isoformat(),
-            "student": username,
-            "student_display": display,
-            "metadata": {
-                "student": username,
-                "student_display": display,
-                "metric": metric_key,
-            },
-        }
 
     # ------------------------------------------------------------------ #
     # Supporting builders
@@ -363,161 +283,38 @@ class InternalMetricsCalculator:
         return len(student_entries) == 0
 
     # ------------------------------------------------------------------ #
-    # Historical metrics
+    # Historical metrics (using registered metric classes)
     # ------------------------------------------------------------------ #
     def _build_historical_payload(self) -> Dict:
+        """
+        Build historical payload using registered historical metric classes.
+        """
+        strategic_metrics: Dict[str, List[Dict]] = {}
+        project_metrics: Dict[str, List[Dict]] = {}
+        user_metrics: Dict[str, List[Dict]] = {}
+
+        for metric_class in HISTORICAL_METRIC_REGISTRY:
+            try:
+                metric_instance = metric_class(self.project)
+                series_data = metric_instance.calculate_series()
+                
+                # Classify based on series_id patterns
+                for series_id, data in series_data.items():
+                    if "user" in series_id.lower():
+                        user_metrics[series_id] = data
+                    elif series_id == "task_completion":
+                        strategic_metrics[series_id] = data
+                    else:
+                        project_metrics[series_id] = data
+            except Exception:
+                pass
+
         return {
-            "strategicMetrics": self._historical_project_completion(),
-            "projectMetrics": self._historical_task_vs_issue(),
-            "userMetrics": self._historical_user_activity(),
-            # Not rendered in current UI
+            "strategicMetrics": strategic_metrics,
+            "projectMetrics": project_metrics,
+            "userMetrics": user_metrics,
             "qualityFactors": {},
         }
-
-    def _historical_project_completion(self) -> Dict[str, List[Dict]]:
-        """
-        Histórico Project:
-        - task_completion: ratio de tareas cerradas por semana (últimos ~180d).
-        """
-        sql = """
-            SELECT
-                DATE_TRUNC('week', COALESCE(t.finished_date, t.created_date))::date AS bucket,
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE ts.is_closed) AS closed
-            FROM tasks_task t
-            LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
-            WHERE
-                t.project_id = %s
-                AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '180 days'
-            GROUP BY bucket
-            ORDER BY bucket
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id])
-            rows = _dictfetchall(cursor)
-
-        series = []
-        for row in rows:
-            total = row.get("total") or 0
-            closed = row.get("closed") or 0
-            ratio = (closed / float(total)) if total else 0.0
-            bucket = row["bucket"].isoformat() if row.get("bucket") else None
-            series.append(
-                {
-                    "id": "task_completion",
-                    "name": "Cierre semanal de tareas",
-                    "date": bucket,
-                    "value": round(ratio, 4),
-                }
-            )
-        return {"task_completion": series}
-
-    def _historical_task_vs_issue(self) -> Dict[str, List[Dict]]:
-        """
-        Histórico Project:
-        - closed_tasks: tareas cerradas/semana.
-        - closed_issues: issues cerradas/semana.
-        Ambas se muestran en “Historical Project” (serie comparativa).
-        """
-        sql = """
-            WITH buckets AS (
-                SELECT
-                    DATE_TRUNC('week', COALESCE(finished_date, created_date))::date AS bucket,
-                    COUNT(*) FILTER (WHERE ts.is_closed) AS closed_tasks,
-                    COUNT(*) AS total_tasks
-                FROM tasks_task t
-                LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
-                WHERE
-                    t.project_id = %s
-                    AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '180 days'
-                GROUP BY bucket
-            )
-            SELECT bucket, closed_tasks, total_tasks FROM buckets ORDER BY bucket
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id])
-            task_rows = _dictfetchall(cursor)
-
-        sql_issues = """
-            SELECT
-                DATE_TRUNC('week', COALESCE(i.finished_date, i.created_date))::date AS bucket,
-                COUNT(*) FILTER (WHERE st.is_closed) AS closed_issues,
-                COUNT(*) AS total_issues
-            FROM issues_issue i
-            LEFT JOIN projects_issuestatus st ON st.id = i.status_id
-            WHERE
-                i.project_id = %s
-                AND COALESCE(i.finished_date, i.created_date) >= NOW() - INTERVAL '180 days'
-            GROUP BY bucket
-            ORDER BY bucket
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql_issues, [self.project.id])
-            issue_rows = _dictfetchall(cursor)
-
-        project_metrics = {
-            "closed_tasks": [
-                {
-                    "id": "closed_tasks",
-                    "name": "Tareas cerradas",
-                    "date": row["bucket"].isoformat() if row.get("bucket") else None,
-                    "value": row.get("closed_tasks") or 0,
-                }
-                for row in task_rows
-            ],
-            "closed_issues": [
-                {
-                    "id": "closed_issues",
-                    "name": "Issues resueltos",
-                    "date": row["bucket"].isoformat() if row.get("bucket") else None,
-                    "value": row.get("closed_issues") or 0,
-                }
-                for row in issue_rows
-            ],
-        }
-
-        return project_metrics
-
-    def _historical_user_activity(self) -> Dict[str, List[Dict]]:
-        """
-        Histórico Team:
-        - user_closed_tasks: tareas cerradas por usuario y semana (últimos ~90d).
-        Si no hay datos, la vista histórica de Team queda vacía.
-        """
-        sql = """
-            SELECT
-                DATE_TRUNC('week', COALESCE(t.finished_date, t.created_date))::date AS bucket,
-                u.username,
-                COUNT(*) FILTER (WHERE ts.is_closed) AS closed_tasks
-            FROM tasks_task t
-            LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
-            LEFT JOIN users_user u ON u.id = t.assigned_to_id
-            WHERE
-                t.project_id = %s
-                AND u.username IS NOT NULL
-                AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '90 days'
-            GROUP BY bucket, u.username
-            ORDER BY bucket, u.username
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id])
-            rows = _dictfetchall(cursor)
-
-        grouped: Dict[str, List[Dict]] = defaultdict(list)
-        for row in rows:
-            bucket = row["bucket"].isoformat() if row.get("bucket") else None
-            username = row.get("username")
-            grouped["user_closed_tasks"].append(
-                {
-                    "id": "user_closed_tasks",
-                    "name": "Tareas cerradas por usuario",
-                    "date": bucket,
-                    "value": row.get("closed_tasks") or 0,
-                    "student": username,
-                }
-            )
-
-        return grouped
 
 # ---------------------------------------------------------------------- #
 # Snapshot helpers
