@@ -71,7 +71,7 @@ except (TypeError, ValueError):
 
 INSTANCE_TYPE = "SRC"
 
-METRICS_PROVIDER = os.environ.get("TAIGA_METRICS_PROVIDER", "external").lower()
+METRICS_PROVIDER = os.environ.get("TAIGA_METRICS_PROVIDER", "internal").lower()
 try:
     METRICS_INTERNAL_SNAPSHOT_TTL_MINUTES = int(os.environ.get("TAIGA_METRICS_SNAPSHOT_TTL", "60"))
 except (TypeError, ValueError):

@@ -71,7 +71,7 @@ class ProjectMetricsConfig(models.Model):
     provider = models.CharField(
         max_length=32,
         choices=PROVIDER_CHOICES,
-        default=PROVIDER_EXTERNAL,
+        default=PROVIDER_INTERNAL,
     )
     external_project_id = models.CharField(
         max_length=255,
