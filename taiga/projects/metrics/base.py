@@ -142,6 +142,7 @@ class BaseMetric(ABC):
             "description": self.description,
             "qualityFactors": self.quality_factors,
             "metadata": metadata or {},
+            "classification": "project",
         }
 
 
@@ -202,6 +203,7 @@ class BaseStudentMetric(ABC):
                 "student_display": display,
                 "metric": self.metric_key,
             },
+            "classification": "team",
         }
 
 
