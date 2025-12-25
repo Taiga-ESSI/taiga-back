@@ -143,7 +143,7 @@ class InternalMetricsCalculator:
                     COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id AND ts.is_closed) AS closed_tasks,
                     COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id AND t.is_blocked) AS blocked_tasks,
                     COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id) AS assigned_stories,
-                    COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id AND us.is_closed) AS closed_stories,
+                    COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id AND usst.is_closed) AS closed_stories,
                     COUNT(DISTINCT i.id) FILTER (WHERE i.assigned_to_id = u.id) AS assigned_issues,
                     COUNT(DISTINCT i.id) FILTER (WHERE i.assigned_to_id = u.id AND ist.is_closed) AS closed_issues
                 FROM projects_membership m
@@ -155,6 +155,7 @@ class InternalMetricsCalculator:
                 LEFT JOIN userstories_userstory us ON us.project_id = m.project_id 
                                                   AND us.assigned_to_id = u.id
                                                   AND us.milestone_id = %s
+                LEFT JOIN projects_userstorystatus usst ON usst.id = us.status_id
                 LEFT JOIN issues_issue i ON i.project_id = m.project_id 
                                         AND i.assigned_to_id = u.id
                                         AND i.milestone_id = %s
@@ -175,7 +176,7 @@ class InternalMetricsCalculator:
                     COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id AND ts.is_closed) AS closed_tasks,
                     COUNT(DISTINCT t.id) FILTER (WHERE t.assigned_to_id = u.id AND t.is_blocked) AS blocked_tasks,
                     COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id) AS assigned_stories,
-                    COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id AND us.is_closed) AS closed_stories,
+                    COUNT(DISTINCT us.id) FILTER (WHERE us.assigned_to_id = u.id AND usst.is_closed) AS closed_stories,
                     COUNT(DISTINCT i.id) FILTER (WHERE i.assigned_to_id = u.id) AS assigned_issues,
                     COUNT(DISTINCT i.id) FILTER (WHERE i.assigned_to_id = u.id AND ist.is_closed) AS closed_issues
                 FROM projects_membership m
@@ -183,6 +184,7 @@ class InternalMetricsCalculator:
                 LEFT JOIN tasks_task t ON t.project_id = m.project_id AND t.assigned_to_id = u.id
                 LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
                 LEFT JOIN userstories_userstory us ON us.project_id = m.project_id AND us.assigned_to_id = u.id
+                LEFT JOIN projects_userstorystatus usst ON usst.id = us.status_id
                 LEFT JOIN issues_issue i ON i.project_id = m.project_id AND i.assigned_to_id = u.id
                 LEFT JOIN projects_issuestatus ist ON ist.id = i.status_id
                 WHERE m.project_id = %s AND m.user_id IS NOT NULL

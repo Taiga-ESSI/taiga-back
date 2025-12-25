@@ -54,10 +54,12 @@ class TaskCompletionMetric(BaseMetric):
         sql = f"""
             SELECT
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE ts.is_closed) AS closed,
-                COUNT(*) FILTER (
-                    WHERE ts.is_closed AND t.finished_date >= NOW() - INTERVAL '7 days'
-                ) AS recent_closed
+                COALESCE(SUM(CASE WHEN ts.is_closed THEN 1 ELSE 0 END), 0) AS closed,
+                COALESCE(SUM(CASE 
+                    WHEN ts.is_closed AND t.finished_date >= NOW() - INTERVAL '7 days' 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) AS recent_closed
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             WHERE t.project_id = %s {sprint_filter}
@@ -110,8 +112,9 @@ class UserStoryCompletionMetric(BaseMetric):
         sql = f"""
             SELECT
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE us.is_closed) AS closed
+                COALESCE(SUM(CASE WHEN st.is_closed THEN 1 ELSE 0 END), 0) AS closed
             FROM userstories_userstory us
+            LEFT JOIN projects_userstorystatus st ON st.id = us.status_id
             WHERE us.project_id = %s {sprint_filter}
         """
         params = [self.project.id]
@@ -159,10 +162,12 @@ class IssueResolutionMetric(BaseMetric):
         sql = f"""
             SELECT
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE st.is_closed) AS closed,
-                COUNT(*) FILTER (
-                    WHERE st.is_closed AND i.finished_date >= NOW() - INTERVAL '14 days'
-                ) AS recent_closed
+                COALESCE(SUM(CASE WHEN st.is_closed THEN 1 ELSE 0 END), 0) AS closed,
+                COALESCE(SUM(CASE 
+                    WHEN st.is_closed AND i.finished_date >= NOW() - INTERVAL '14 days' 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) AS recent_closed
             FROM issues_issue i
             LEFT JOIN projects_issuestatus st ON st.id = i.status_id
             WHERE i.project_id = %s {sprint_filter}
@@ -214,7 +219,7 @@ class TaskAssignmentMetric(BaseMetric):
         sql = f"""
             SELECT
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE t.assigned_to_id IS NOT NULL) AS assigned
+                COALESCE(SUM(CASE WHEN t.assigned_to_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS assigned
             FROM tasks_task t
             WHERE t.project_id = %s {sprint_filter}
         """
@@ -263,7 +268,7 @@ class BlockedTasksMetric(BaseMetric):
         sql = f"""
             SELECT
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE t.is_blocked = TRUE) AS blocked
+                COALESCE(SUM(CASE WHEN t.is_blocked = TRUE THEN 1 ELSE 0 END), 0) AS blocked
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             WHERE t.project_id = %s AND ts.is_closed = FALSE {sprint_filter}
@@ -312,9 +317,11 @@ class StoriesWithTasksMetric(BaseMetric):
         sql = f"""
             SELECT
                 COUNT(DISTINCT us.id) AS total_stories,
-                COUNT(DISTINCT us.id) FILTER (
-                    WHERE EXISTS (SELECT 1 FROM tasks_task t WHERE t.user_story_id = us.id)
-                ) AS stories_with_tasks
+                COUNT(DISTINCT CASE 
+                    WHEN EXISTS (SELECT 1 FROM tasks_task t WHERE t.user_story_id = us.id) 
+                    THEN us.id 
+                    ELSE NULL 
+                END) AS stories_with_tasks
             FROM userstories_userstory us
             WHERE us.project_id = %s {sprint_filter}
         """
@@ -362,9 +369,7 @@ class TeamParticipationMetric(BaseMetric):
             sql = """
                 SELECT
                     COUNT(DISTINCT m.user_id) AS total_members,
-                    COUNT(DISTINCT t.assigned_to_id) FILTER (
-                        WHERE t.assigned_to_id IS NOT NULL
-                    ) AS members_with_tasks
+                    COUNT(DISTINCT CASE WHEN t.assigned_to_id IS NOT NULL THEN t.assigned_to_id ELSE NULL END) AS members_with_tasks
                 FROM projects_membership m
                 LEFT JOIN tasks_task t ON t.project_id = m.project_id 
                                       AND t.assigned_to_id = m.user_id
@@ -376,9 +381,7 @@ class TeamParticipationMetric(BaseMetric):
             sql = """
                 SELECT
                     COUNT(DISTINCT m.user_id) AS total_members,
-                    COUNT(DISTINCT t.assigned_to_id) FILTER (
-                        WHERE t.assigned_to_id IS NOT NULL
-                    ) AS members_with_tasks
+                    COUNT(DISTINCT CASE WHEN t.assigned_to_id IS NOT NULL THEN t.assigned_to_id ELSE NULL END) AS members_with_tasks
                 FROM projects_membership m
                 LEFT JOIN tasks_task t ON t.project_id = m.project_id 
                                       AND t.assigned_to_id = m.user_id
@@ -426,9 +429,11 @@ class OverdueTasksMetric(BaseMetric):
         sql = f"""
             SELECT
                 COUNT(*) AS total_open,
-                COUNT(*) FILTER (
-                    WHERE t.due_date IS NOT NULL AND t.due_date < CURRENT_DATE
-                ) AS overdue
+                COALESCE(SUM(CASE 
+                    WHEN t.due_date IS NOT NULL AND t.due_date < CURRENT_DATE 
+                    THEN 1 
+                    ELSE 0 
+                END), 0) AS overdue
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             WHERE t.project_id = %s AND ts.is_closed = FALSE {sprint_filter}
@@ -476,7 +481,7 @@ class TaskCompletionHistoricalMetric(BaseHistoricalMetric):
             SELECT
                 DATE_TRUNC('week', COALESCE(t.finished_date, t.created_date))::date AS bucket,
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE ts.is_closed) AS closed
+                COALESCE(SUM(CASE WHEN ts.is_closed THEN 1 ELSE 0 END), 0) AS closed
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             WHERE
@@ -520,7 +525,7 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
         sql_tasks = """
             SELECT
                 DATE_TRUNC('week', COALESCE(finished_date, created_date))::date AS bucket,
-                COUNT(*) FILTER (WHERE ts.is_closed) AS closed_tasks
+                COALESCE(SUM(CASE WHEN ts.is_closed THEN 1 ELSE 0 END), 0) AS closed_tasks
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             WHERE
@@ -537,7 +542,7 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
         sql_issues = """
             SELECT
                 DATE_TRUNC('week', COALESCE(i.finished_date, i.created_date))::date AS bucket,
-                COUNT(*) FILTER (WHERE st.is_closed) AS closed_issues
+                COALESCE(SUM(CASE WHEN st.is_closed THEN 1 ELSE 0 END), 0) AS closed_issues
             FROM issues_issue i
             LEFT JOIN projects_issuestatus st ON st.id = i.status_id
             WHERE
@@ -587,7 +592,7 @@ class UserActivityHistoricalMetric(BaseHistoricalMetric):
             SELECT
                 DATE_TRUNC('week', COALESCE(t.finished_date, t.created_date))::date AS bucket,
                 u.username,
-                COUNT(*) FILTER (WHERE ts.is_closed) AS closed_tasks
+                COALESCE(SUM(CASE WHEN ts.is_closed THEN 1 ELSE 0 END), 0) AS closed_tasks
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             LEFT JOIN users_user u ON u.id = t.assigned_to_id

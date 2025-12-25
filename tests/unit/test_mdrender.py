@@ -12,11 +12,27 @@ from taiga.mdrender.extensions import refresh_attachment
 from taiga.mdrender.service import render, cache_by_sha, get_diff_of_htmls, render_and_extract
 from taiga.projects.attachments.services import REFRESH_PARAM
 
+import pytest
 import time
+
+import pytest
 
 dummy_project = MagicMock()
 dummy_project.id = 1
 dummy_project.slug = "test"
+
+
+@pytest.fixture(autouse=True)
+def override_url_settings(settings):
+    settings.SITES = {
+        "front": {
+            "domain": "localhost:9001",
+            "scheme": "http",
+            "name": "front",
+        }
+    }
+    settings.SITE_ID = "front"
+    settings.STATIC_URL = "http://localhost:8000/static/"
 
 
 dummy_object = MagicMock()
