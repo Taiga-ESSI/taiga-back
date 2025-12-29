@@ -10,7 +10,7 @@ set -euo pipefail
 
 # Give permission to taiga:taiga after mounting volumes
 echo Give permission to taiga:taiga
-chown -R taiga:taiga /taiga-back
+chown -R taiga:taiga /taiga-back || true
 
 # Start Celery processes
 echo Starting Celery...
