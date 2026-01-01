@@ -196,7 +196,11 @@ def test_student_metrics_payload(metrics_data):
     
     # User Stories: 1 assigned (US1). 1 closed (US1).
     assert metrics1["totalus"] == 1
-    assert metrics1["completedus"] == 1
+    assert metrics1["completedus"] == 1.0 # Ratio
+    
+    # Check description for student1 completed stories
+    completed_us_metric = next(m for m in metrics1_list if m["metadata"]["metric"] == "completedus")
+    assert completed_us_metric["value_description"] == "1/1"
     
     # Issues: 1 assigned (Issue 1). 1 closed.
     assert metrics1["assignedissues"] == 1
@@ -215,7 +219,11 @@ def test_student_metrics_payload(metrics_data):
     
     # User Stories: 1 assigned (US2). 0 closed (US2 is open).
     assert metrics2["totalus"] == 1
-    assert metrics2["completedus"] == 0
+    assert metrics2["completedus"] == 0.0 # Ratio
+    
+    # Check description for student2 completed stories
+    completed_us_metric_2 = next(m for m in metrics2_list if m["metadata"]["metric"] == "completedus")
+    assert completed_us_metric_2["value_description"] == "0/1"
 
 def test_historical_metric_user_activity(metrics_data):
     metric = UserActivityHistoricalMetric(metrics_data)

@@ -618,7 +618,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
             "last_14_days": 14,
             "last_30_days": 30,
             "last_90_days": 90,
-            "last_semester": 180,
+            "last_semester": 360,
             "last_year": 365,
         }
         

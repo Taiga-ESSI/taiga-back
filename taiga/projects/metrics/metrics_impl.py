@@ -469,12 +469,12 @@ class OverdueTasksMetric(BaseMetric):
 @register_historical_metric
 class TaskCompletionHistoricalMetric(BaseHistoricalMetric):
     """
-    Historical: task completion ratio per week (last ~180 days).
+    Historical: task completion ratio per week (last ~360 days).
     """
     
     series_id = "task_completion"
     name = "Cierre semanal de tareas"
-    interval_days = 180
+    interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
         sql = """
@@ -518,7 +518,7 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
     
     series_id = "task_vs_issue"
     name = "Tareas vs Issues"
-    interval_days = 180
+    interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
         # Tasks
@@ -580,12 +580,12 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
 @register_historical_metric
 class UserActivityHistoricalMetric(BaseHistoricalMetric):
     """
-    Historical Team: closed tasks per user per week (last ~90 days).
+    Historical Team: closed tasks per user per week (last ~360 days).
     """
     
     series_id = "user_closed_tasks"
     name = "Tareas cerradas por usuario"
-    interval_days = 90
+    interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
         sql = """
@@ -621,6 +621,232 @@ class UserActivityHistoricalMetric(BaseHistoricalMetric):
         return {self.series_id: series}
 
 
+@register_historical_metric
+class UserStoryPointsHistoricalMetric(BaseHistoricalMetric):
+    """
+    Historical Team: Story Points completados por usuario por semana.
+    Cuenta los SPs de las User Stories donde el usuario cerró tareas.
+    """
+    
+    series_id = "user_story_points"
+    name = "Story Points por usuario"
+    interval_days = 360
+    
+    def calculate_series(self) -> Dict[str, List[Dict]]:
+        # Get story points per user based on tasks they completed
+        # Each user gets full SP credit for US where they completed at least one task
+        # total_points is calculated from userstories_rolepoints + projects_points
+        sql = """
+            WITH us_points AS (
+                SELECT 
+                    us.id,
+                    us.finish_date,
+                    COALESCE(SUM(pp.value), 0) AS total_points
+                FROM userstories_userstory us
+                LEFT JOIN userstories_rolepoints rp ON rp.user_story_id = us.id
+                LEFT JOIN projects_points pp ON pp.id = rp.points_id
+                WHERE us.project_id = %s
+                GROUP BY us.id, us.finish_date
+            )
+            SELECT
+                DATE_TRUNC('week', usp.finish_date)::date AS bucket,
+                u.username,
+                COALESCE(SUM(DISTINCT usp.total_points), 0) AS total_points
+            FROM us_points usp
+            JOIN userstories_userstory us ON us.id = usp.id
+            JOIN projects_userstorystatus uss ON uss.id = us.status_id
+            JOIN tasks_task t ON t.user_story_id = us.id
+            JOIN projects_taskstatus ts ON ts.id = t.status_id
+            JOIN users_user u ON u.id = t.assigned_to_id
+            WHERE
+                uss.is_closed = TRUE
+                AND ts.is_closed = TRUE
+                AND usp.finish_date IS NOT NULL
+                AND usp.finish_date >= NOW() - INTERVAL '%s days'
+            GROUP BY bucket, u.username
+            ORDER BY bucket, u.username
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [self.project.id, self.interval_days])
+            rows = _dictfetchall(cursor)
+
+        series = []
+        for row in rows:
+            bucket = row["bucket"].isoformat() if row.get("bucket") else None
+            series.append({
+                "id": self.series_id,
+                "name": self.name,
+                "date": bucket,
+                "value": float(row.get("total_points") or 0),
+                "student": row.get("username"),
+            })
+
+        return {self.series_id: series}
+
+
+@register_historical_metric
+class RoleStoryPointsHistoricalMetric(BaseHistoricalMetric):
+    """
+    Historical Team: Story Points completados por rol por semana.
+    Muestra la distribución del trabajo por área funcional (UX, Design, Front, Back).
+    """
+    
+    series_id = "role_story_points"
+    name = "Story Points por rol"
+    interval_days = 360
+    
+    def calculate_series(self) -> Dict[str, List[Dict]]:
+        # Get story points per role when US is closed, grouped by week
+        # Uses the role_points system from Taiga
+        sql = """
+            SELECT
+                DATE_TRUNC('week', us.finish_date)::date AS bucket,
+                r.name AS role_name,
+                COALESCE(SUM(p.value), 0) AS role_points
+            FROM userstories_userstory us
+            JOIN userstories_rolepoints rp ON rp.user_story_id = us.id
+            JOIN users_role r ON r.id = rp.role_id
+            JOIN projects_points p ON p.id = rp.points_id
+            LEFT JOIN projects_userstorystatus uss ON uss.id = us.status_id
+            WHERE
+                us.project_id = %s
+                AND uss.is_closed = TRUE
+                AND us.finish_date IS NOT NULL
+                AND us.finish_date >= NOW() - INTERVAL '%s days'
+                AND p.value IS NOT NULL
+            GROUP BY bucket, r.name
+            ORDER BY bucket, r.name
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [self.project.id, self.interval_days])
+            rows = _dictfetchall(cursor)
+
+        series = []
+        for row in rows:
+            bucket = row["bucket"].isoformat() if row.get("bucket") else None
+            role_name = row.get("role_name", "Unknown")
+            series.append({
+                "id": self.series_id,
+                "name": f"SP {role_name}",
+                "date": bucket,
+                "value": float(row.get("role_points") or 0),
+                "role": role_name,
+            })
+
+        return {self.series_id: series}
+
+
+@register_historical_metric
+class UserStoriesClosedHistoricalMetric(BaseHistoricalMetric):
+    """
+    Historical Team: User Stories cerradas por usuario por semana.
+    Permite ver la productividad en términos de historias completadas.
+    """
+    
+    series_id = "user_stories_closed"
+    name = "Historias cerradas por usuario"
+    interval_days = 360
+    
+    def calculate_series(self) -> Dict[str, List[Dict]]:
+        sql = """
+            SELECT
+                DATE_TRUNC('week', us.finish_date)::date AS bucket,
+                u.username,
+                COUNT(*) AS stories_closed
+            FROM userstories_userstory us
+            LEFT JOIN users_user u ON u.id = us.assigned_to_id
+            LEFT JOIN projects_userstorystatus uss ON uss.id = us.status_id
+            WHERE
+                us.project_id = %s
+                AND uss.is_closed = TRUE
+                AND us.finish_date IS NOT NULL
+                AND us.finish_date >= NOW() - INTERVAL '%s days'
+                AND u.username IS NOT NULL
+            GROUP BY bucket, u.username
+            ORDER BY bucket, u.username
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [self.project.id, self.interval_days])
+            rows = _dictfetchall(cursor)
+
+        series = []
+        for row in rows:
+            bucket = row["bucket"].isoformat() if row.get("bucket") else None
+            series.append({
+                "id": self.series_id,
+                "name": self.name,
+                "date": bucket,
+                "value": row.get("stories_closed") or 0,
+                "student": row.get("username"),
+            })
+
+        return {self.series_id: series}
+
+
+@register_historical_metric
+class SprintVelocityHistoricalMetric(BaseHistoricalMetric):
+    """
+    Historical: Story Points completados por sprint.
+    Muestra la velocidad del equipo a lo largo de los sprints.
+    """
+    
+    series_id = "sprint_velocity"
+    name = "Velocidad por Sprint"
+    interval_days = 360
+    
+    def calculate_series(self) -> Dict[str, List[Dict]]:
+        # total_points is calculated from userstories_rolepoints + projects_points
+        sql = """
+            WITH us_points AS (
+                SELECT 
+                    us.id,
+                    us.milestone_id,
+                    us.status_id,
+                    COALESCE(SUM(pp.value), 0) AS total_points
+                FROM userstories_userstory us
+                LEFT JOIN userstories_rolepoints rp ON rp.user_story_id = us.id
+                LEFT JOIN projects_points pp ON pp.id = rp.points_id
+                WHERE us.project_id = %s
+                GROUP BY us.id, us.milestone_id, us.status_id
+            )
+            SELECT
+                m.name AS sprint_name,
+                m.estimated_finish AS finish_date,
+                COALESCE(SUM(
+                    CASE WHEN uss.is_closed THEN usp.total_points ELSE 0 END
+                ), 0) AS completed_points,
+                COALESCE(SUM(usp.total_points), 0) AS total_points
+            FROM milestones_milestone m
+            LEFT JOIN us_points usp ON usp.milestone_id = m.id
+            LEFT JOIN projects_userstorystatus uss ON uss.id = usp.status_id
+            WHERE 
+                m.project_id = %s
+                AND m.estimated_finish >= NOW() - INTERVAL '%s days'
+            GROUP BY m.id, m.name, m.estimated_finish
+            ORDER BY m.estimated_finish
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [self.project.id, self.project.id, self.interval_days])
+            rows = _dictfetchall(cursor)
+
+        series = []
+        for row in rows:
+            finish_date = row.get("finish_date")
+            date_str = finish_date.isoformat() if finish_date else None
+            series.append({
+                "id": self.series_id,
+                "name": row.get("sprint_name", "Sprint"),
+                "date": date_str,
+                "value": float(row.get("completed_points") or 0),
+                "metadata": {
+                    "total_planned": float(row.get("total_points") or 0),
+                    "sprint_name": row.get("sprint_name"),
+                }
+            })
+
+        return {self.series_id: series}
+
+
 # ============================================================================ #
 # STUDENT/TEAM METRICS
 # ============================================================================ #
@@ -631,72 +857,99 @@ from taiga.projects.metrics.base import BaseStudentMetric, register_student_metr
 
 @register_student_metric
 class AssignedTasksStudentMetric(BaseStudentMetric):
-    """Tareas asignadas a cada usuario."""
+    """Proporción de tareas asignadas a cada usuario (suma de todos = 1)."""
     metric_key = "assignedtasks"
     label = "Tareas asignadas"
     
+    def __init__(self, project, context=None):
+        super().__init__(project, context)
+        self._user_assigned = 0
+        self._total = 0
+    
     def get_value_for_user(self, user_data: Dict) -> float:
-        return user_data.get("assigned_tasks", 0)
+        self._user_assigned = user_data.get("assigned_tasks", 0)
+        self._total = self.context.get("total_tasks", 0)
+        if self._total > 0:
+            return self._user_assigned / float(self._total)
+        return 0.0
+    
+    def build_metric_for_user(self, username: str, display_name: str, value: float) -> Dict:
+        metric_dict = super().build_metric_for_user(username, display_name, value)
+        metric_dict["value_description"] = f"{self._user_assigned}/{self._total}"
+        return metric_dict
 
 
 @register_student_metric
 class ClosedTasksStudentMetric(BaseStudentMetric):
-    """Tareas cerradas por cada usuario."""
+    """Ratio de tareas cerradas / asignadas por usuario."""
     metric_key = "closedtasks"
     label = "Tareas cerradas"
     
+    def __init__(self, project, context=None):
+        super().__init__(project, context)
+        self._closed = 0
+        self._assigned = 0
+    
     def get_value_for_user(self, user_data: Dict) -> float:
-        return user_data.get("closed_tasks", 0)
+        self._assigned = user_data.get("assigned_tasks", 0)
+        self._closed = user_data.get("closed_tasks", 0)
+        if self._assigned > 0:
+            return self._closed / float(self._assigned)
+        return 0.0
+    
+    def build_metric_for_user(self, username: str, display_name: str, value: float) -> Dict:
+        metric_dict = super().build_metric_for_user(username, display_name, value)
+        metric_dict["value_description"] = f"{self._closed}/{self._assigned}"
+        return metric_dict
 
 
 @register_student_metric
 class AssignedStoriesStudentMetric(BaseStudentMetric):
-    """Historias asignadas a cada usuario."""
+    """Proporción de historias asignadas a cada usuario (suma de todos = 1)."""
     metric_key = "totalus"
     label = "Historias asignadas"
     
+    def __init__(self, project, context=None):
+        super().__init__(project, context)
+        self._user_assigned = 0
+        self._total = 0
+    
     def get_value_for_user(self, user_data: Dict) -> float:
-        return user_data.get("assigned_stories", 0)
+        self._user_assigned = user_data.get("assigned_stories", 0)
+        self._total = self.context.get("total_stories", 0)
+        if self._total > 0:
+            return self._user_assigned / float(self._total)
+        return 0.0
+    
+    def build_metric_for_user(self, username: str, display_name: str, value: float) -> Dict:
+        metric_dict = super().build_metric_for_user(username, display_name, value)
+        metric_dict["value_description"] = f"{self._user_assigned}/{self._total}"
+        return metric_dict
 
 
 @register_student_metric
 class CompletedStoriesStudentMetric(BaseStudentMetric):
-    """Historias completadas por cada usuario."""
+    """Ratio de historias completadas / asignadas por usuario."""
     metric_key = "completedus"
     label = "Historias finalizadas"
-    
+
+    def __init__(self, project, context=None):
+        super().__init__(project, context)
+        self._last_assigned = 0
+        self._last_closed = 0
+
     def get_value_for_user(self, user_data: Dict) -> float:
-        return user_data.get("closed_stories", 0)
+        self._last_assigned = user_data.get("assigned_stories", 0)
+        self._last_closed = user_data.get("closed_stories", 0)
+        return (self._last_closed / float(self._last_assigned)) if self._last_assigned > 0 else 0.0
 
-
-# NOTA: TaskCompletionRateStudentMetric y TotalWorkItemsStudentMetric eliminadas
-# porque el frontend espera valores absolutos comparables (no ratios 0-1 mezclados
-# con números absolutos). Si quieres añadirlas, el frontend necesita saber
-# qué tipo de valor es cada métrica para mostrarla correctamente.
-
-
-@register_student_metric
-class AssignedIssuesStudentMetric(BaseStudentMetric):
-    """Issues asignadas a cada usuario."""
-    metric_key = "assignedissues"
-    label = "Issues asignadas"
-    
-    def get_value_for_user(self, user_data: Dict) -> float:
-        return user_data.get("assigned_issues", 0)
-
-
-@register_student_metric
-class ClosedIssuesStudentMetric(BaseStudentMetric):
-    """Issues resueltas por cada usuario."""
-    metric_key = "closedissues"
-    label = "Issues resueltas"
-    
-    def get_value_for_user(self, user_data: Dict) -> float:
-        return user_data.get("closed_issues", 0)
-
-
-# NOTA: BlockedTasksStudentMetric eliminada temporalmente porque 
-# puede confundir (alto = malo, pero el frontend muestra alto como bueno)
+    def build_metric_for_user(self, username: str, display_name: str, value: float) -> Dict:
+        """
+        Overridden to provide "X/Y" description for the ratio.
+        """
+        metric_dict = super().build_metric_for_user(username, display_name, value)
+        metric_dict["value_description"] = f"{self._last_closed}/{self._last_assigned}"
+        return metric_dict
 
 
 # ============================================================================ #
@@ -750,37 +1003,44 @@ class ClosedIssuesStudentMetric(BaseStudentMetric):
 #
 #
 # -------------------- HISTORICAL METRIC EXAMPLE --------------------
+# NOTE: SprintVelocityHistoricalMetric is now implemented above as a real metric.
+# 
+# Example of another potential historical metric:
+#
 # @register_historical_metric
-# class SprintVelocityHistoricalMetric(BaseHistoricalMetric):
-#     """Story points completed per sprint."""
+# class IssueResolutionTimeHistoricalMetric(BaseHistoricalMetric):
+#     """Average issue resolution time per week."""
 #     
-#     series_id = "sprint_velocity"
-#     name = "Velocidad por Sprint"
-#     interval_days = 365
+#     series_id = "issue_resolution_time"
+#     name = "Tiempo de resolución de issues"
+#     interval_days = 360
 #     
 #     def calculate_series(self) -> Dict[str, List[Dict]]:
 #         sql = """
 #             SELECT
-#                 m.name AS sprint_name,
-#                 m.estimated_finish AS date,
-#                 SUM(us.total_points) FILTER (WHERE us.is_closed) AS points
-#             FROM milestones_milestone m
-#             LEFT JOIN userstories_userstory us ON us.milestone_id = m.id
-#             WHERE m.project_id = %s
-#             GROUP BY m.id, m.name, m.estimated_finish
-#             ORDER BY m.estimated_finish
+#                 DATE_TRUNC('week', i.finished_date)::date AS bucket,
+#                 AVG(EXTRACT(EPOCH FROM (i.finished_date - i.created_date)) / 3600) AS avg_hours
+#             FROM issues_issue i
+#             LEFT JOIN projects_issuestatus ist ON ist.id = i.status_id
+#             WHERE
+#                 i.project_id = %s
+#                 AND ist.is_closed = TRUE
+#                 AND i.finished_date IS NOT NULL
+#                 AND i.finished_date >= NOW() - INTERVAL '%s days'
+#             GROUP BY bucket
+#             ORDER BY bucket
 #         """
 #         with connection.cursor() as cursor:
-#             cursor.execute(sql, [self.project.id])
+#             cursor.execute(sql, [self.project.id, self.interval_days])
 #             rows = _dictfetchall(cursor)
 #
 #         return {
 #             self.series_id: [
 #                 {
 #                     "id": self.series_id,
-#                     "name": row.get("sprint_name", "Sprint"),
-#                     "date": row["date"].isoformat() if row.get("date") else None,
-#                     "value": row.get("points") or 0,
+#                     "name": self.name,
+#                     "date": row["bucket"].isoformat() if row.get("bucket") else None,
+#                     "value": round(row.get("avg_hours") or 0, 2),
 #                 }
 #                 for row in rows
 #             ]

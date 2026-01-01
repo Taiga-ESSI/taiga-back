@@ -166,8 +166,9 @@ class BaseStudentMetric(ABC):
     label: str = ""
     quality_factors: List[str] = ["Team"]
     
-    def __init__(self, project: "Project"):
+    def __init__(self, project: "Project", context: Optional[Dict] = None):
         self.project = project
+        self.context = context or {}
     
     @abstractmethod
     def get_value_for_user(self, user_data: Dict) -> float:
@@ -216,7 +217,7 @@ class BaseHistoricalMetric(ABC):
     
     series_id: str = ""
     name: str = ""
-    interval_days: int = 180
+    interval_days: int = 360
     
     def __init__(self, project: "Project"):
         self.project = project

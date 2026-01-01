@@ -198,9 +198,19 @@ class InternalMetricsCalculator:
             cursor.execute(sql, params)
             results = _dictfetchall(cursor)
 
-        # Instantiate all registered student metrics
+        # Calculate totals for normalization (sum of all users = 1)
+        total_tasks = sum(row.get("assigned_tasks", 0) for row in results)
+        total_stories = sum(row.get("assigned_stories", 0) for row in results)
+        
+        # Context passed to metric classes for proper normalization
+        context = {
+            "total_tasks": total_tasks,
+            "total_stories": total_stories,
+        }
+
+        # Instantiate all registered student metrics with context
         student_metric_instances = [
-            metric_class(self.project) for metric_class in STUDENT_METRIC_REGISTRY
+            metric_class(self.project, context) for metric_class in STUDENT_METRIC_REGISTRY
         ]
 
         students: List[Dict] = []
@@ -291,25 +301,39 @@ class InternalMetricsCalculator:
         """
         Build historical payload using registered historical metric classes.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         strategic_metrics: Dict[str, List[Dict]] = {}
         project_metrics: Dict[str, List[Dict]] = {}
         user_metrics: Dict[str, List[Dict]] = {}
+
+        logger.info(f"📊 Building historical payload for project {self.project.slug}")
+        logger.info(f"   Registered historical metrics: {len(HISTORICAL_METRIC_REGISTRY)}")
 
         for metric_class in HISTORICAL_METRIC_REGISTRY:
             try:
                 metric_instance = metric_class(self.project)
                 series_data = metric_instance.calculate_series()
                 
+                logger.info(f"   ✓ {metric_class.__name__}: {len(series_data)} series")
+                
                 # Classify based on series_id patterns
                 for series_id, data in series_data.items():
+                    logger.info(f"     - {series_id}: {len(data)} data points")
+                    # User/Team metrics (per-user data for team comparison charts)
                     if "user" in series_id.lower():
                         user_metrics[series_id] = data
-                    elif series_id == "task_completion":
+                    # Strategic metrics (high-level KPIs)
+                    elif series_id in ("task_completion", "sprint_velocity"):
                         strategic_metrics[series_id] = data
+                    # Project metrics (project-level trends like role distribution)
                     else:
                         project_metrics[series_id] = data
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"   ✗ {metric_class.__name__}: {e}")
+
+        logger.info(f"   Total: strategic={len(strategic_metrics)}, project={len(project_metrics)}, user={len(user_metrics)}")
 
         return {
             "strategicMetrics": strategic_metrics,
