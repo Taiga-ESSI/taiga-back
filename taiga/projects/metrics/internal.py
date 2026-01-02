@@ -227,8 +227,9 @@ class InternalMetricsCalculator:
                     value = metric_instance.get_value_for_user(row)
                     metric_dict = metric_instance.build_metric_for_user(username, full_name, value)
                     student_metrics.append(metric_dict)
-                except Exception:
-                    pass
+                    print(f"✅ Student metric: {metric_dict.get('id')} = {value}")
+                except Exception as e:
+                    print(f"❌ Error in {metric_instance.__class__.__name__} for {username}: {e}")
 
             metric_entries.extend(student_metrics)
 
