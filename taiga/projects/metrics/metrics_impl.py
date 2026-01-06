@@ -29,6 +29,44 @@ from taiga.projects.metrics.base import (
 
 
 # ============================================================================ #
+# ADAPTIVE DATE GROUPING
+# ============================================================================ #
+
+def get_adaptive_interval(project_id: int, table: str = "tasks_task", 
+                          date_field: str = "created_date") -> tuple:
+    """
+    Determine the best date grouping interval based on data range.
+    
+    Returns:
+        tuple: (interval_name, interval_days) where interval_name is 
+               'day', 'week', or 'month' and interval_days is the lookback period.
+    
+    Logic:
+        - If project has < 30 days of data -> group by DAY
+        - If project has 30-180 days of data -> group by WEEK  
+        - If project has > 180 days of data -> group by MONTH
+    """
+    sql = f"""
+        SELECT 
+            EXTRACT(DAY FROM (MAX({date_field}) - MIN({date_field}))) AS data_range_days
+        FROM {table}
+        WHERE project_id = %s AND {date_field} IS NOT NULL
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(sql, [project_id])
+        row = cursor.fetchone()
+    
+    data_range = row[0] if row and row[0] else 0
+    
+    if data_range < 30:
+        return ('day', 90)      # Group by day, show last 90 days
+    elif data_range < 180:
+        return ('week', 180)    # Group by week, show last 180 days
+    else:
+        return ('month', 360)   # Group by month, show last 360 days
+
+
+# ============================================================================ #
 # PROJECT METRICS (filtered by active sprint)
 # ============================================================================ #
 
@@ -42,8 +80,8 @@ class TaskCompletionMetric(BaseMetric):
     """
     
     metric_id = "task_completion"
-    name = "Closed tasks"
-    description = "Porcentaje de tareas cerradas en el sprint actual."
+    name = "Tareas cerradas"
+    description = "Progreso de cierre de tareas del sprint."
     quality_factors = ["Delivery"]
     
     def calculate(self) -> Optional[Dict]:
@@ -101,8 +139,8 @@ class UserStoryCompletionMetric(BaseMetric):
     
     metric_id = "userstory_completion"
     name = "Historias completadas"
-    description = "Porcentaje de user stories cerradas en el sprint actual."
-    quality_factors = ["Planning"]
+    description = "Progreso de funcionalidades entregadas."
+    quality_factors = ["Delivery"]
     
     def calculate(self) -> Optional[Dict]:
         sprint = get_active_sprint(self.project.id)
@@ -151,7 +189,7 @@ class IssueResolutionMetric(BaseMetric):
     
     metric_id = "issue_resolution"
     name = "Incidencias resueltas"
-    description = "Estado de resolución de incidencias en el sprint actual."
+    description = "Bugs e incidencias solucionados."
     quality_factors = ["Quality"]
     
     def calculate(self) -> Optional[Dict]:
@@ -208,7 +246,7 @@ class TaskAssignmentMetric(BaseMetric):
     
     metric_id = "task_assignment"
     name = "Tareas asignadas"
-    description = "Porcentaje de tareas con responsable en el sprint actual."
+    description = "Tareas con responsable definido."
     quality_factors = ["Planning"]
     
     def calculate(self) -> Optional[Dict]:
@@ -257,7 +295,7 @@ class BlockedTasksMetric(BaseMetric):
     
     metric_id = "blocked_tasks"
     name = "Tareas sin bloquear"
-    description = "Porcentaje de tareas no bloqueadas en el sprint actual."
+    description = "Tareas que fluyen sin impedimentos."
     quality_factors = ["Quality"]
     
     def calculate(self) -> Optional[Dict]:
@@ -305,8 +343,8 @@ class StoriesWithTasksMetric(BaseMetric):
     """
     
     metric_id = "stories_with_tasks"
-    name = "Historias con tareas"
-    description = "Porcentaje de user stories con tareas en el sprint actual."
+    name = "Historias desglosadas"
+    description = "Historias con tareas definidas."
     quality_factors = ["Planning"]
     
     def calculate(self) -> Optional[Dict]:
@@ -358,8 +396,8 @@ class TeamParticipationMetric(BaseMetric):
     
     metric_id = "team_participation"
     name = "Participación del equipo"
-    description = "Porcentaje de miembros con tareas en el sprint actual."
-    quality_factors = ["Team"]
+    description = "Miembros activos con tareas asignadas."
+    quality_factors = ["Delivery"]
     
     def calculate(self) -> Optional[Dict]:
         sprint = get_active_sprint(self.project.id)
@@ -418,7 +456,7 @@ class OverdueTasksMetric(BaseMetric):
     
     metric_id = "tasks_on_time"
     name = "Tareas en plazo"
-    description = "Porcentaje de tareas no vencidas en el sprint actual."
+    description = "Tareas sin fecha vencida."
     quality_factors = ["Delivery"]
     
     def calculate(self) -> Optional[Dict]:
@@ -462,6 +500,75 @@ class OverdueTasksMetric(BaseMetric):
         )
 
 
+@register_metric
+class TaskClosureTimeMetric(BaseMetric):
+    """
+    KPI: Average Task Closure Time (Global)
+    - Meaning: Average time from task creation to closure.
+    - Value type: Hours (absolute value, not a ratio)
+    - Used in: Project metrics cards as a global KPI.
+    - Uses Team category for unicolor gauge (informative, not good/bad).
+    """
+    
+    metric_id = "task_closure_time"
+    name = "Tiempo medio de cierre"
+    description = "Tiempo promedio de cierre de tareas (en horas)."
+    quality_factors = ["Team"]  # Purple unicolor (informative value)
+    
+    def calculate(self) -> Optional[Dict]:
+        sprint = get_active_sprint(self.project.id)
+        sprint_filter = "AND t.milestone_id = %s" if sprint else ""
+        sprint_name = sprint.get("name", "Sprint") if sprint else "Proyecto"
+        
+        sql = f"""
+            SELECT
+                AVG(EXTRACT(EPOCH FROM (t.finished_date - t.created_date)) / 3600) AS avg_hours,
+                COUNT(*) AS task_count,
+                MIN(EXTRACT(EPOCH FROM (t.finished_date - t.created_date)) / 3600) AS min_hours,
+                MAX(EXTRACT(EPOCH FROM (t.finished_date - t.created_date)) / 3600) AS max_hours
+            FROM tasks_task t
+            LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
+            WHERE 
+                t.project_id = %s 
+                AND ts.is_closed = TRUE
+                AND t.finished_date IS NOT NULL
+                {sprint_filter}
+        """
+        params = [self.project.id]
+        if sprint:
+            params.append(sprint["id"])
+            
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            row = _dictfetchone(cursor)
+
+        avg_hours = row.get("avg_hours") or 0
+        task_count = row.get("task_count") or 0
+        min_hours = row.get("min_hours") or 0
+        max_hours = row.get("max_hours") or 0
+        
+        # Format display value
+        if avg_hours < 1:
+            display = f"{int(avg_hours * 60)} min"
+        elif avg_hours < 24:
+            display = f"{avg_hours:.1f} h"
+        else:
+            days = avg_hours / 24
+            display = f"{days:.1f} días"
+
+        return self._build_result(
+            value=round(avg_hours, 2),  # Value in hours (absolute)
+            value_description=display,   # "24 min" or "2.5 h" or "1.2 días"
+            metadata={
+                "avg_hours": round(avg_hours, 2),
+                "task_count": task_count,
+                "min_hours": round(min_hours, 2),
+                "max_hours": round(max_hours, 2),
+                "sprint_name": sprint_name,
+            }
+        )
+
+
 # ============================================================================ #
 # HISTORICAL METRICS
 # ============================================================================ #
@@ -469,29 +576,35 @@ class OverdueTasksMetric(BaseMetric):
 @register_historical_metric
 class TaskCompletionHistoricalMetric(BaseHistoricalMetric):
     """
-    Historical: task completion ratio per week (last ~360 days).
+    Historical: task completion ratio (adaptive grouping).
+    Uses day/week/month based on data range.
     """
     
     series_id = "task_completion"
-    name = "Cierre semanal de tareas"
+    name = "Cierre de tareas"
     interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
-        sql = """
+        # Get adaptive interval
+        interval_name, interval_days = get_adaptive_interval(
+            self.project.id, table="tasks_task", date_field="created_date"
+        )
+        
+        sql = f"""
             SELECT
-                DATE_TRUNC('week', COALESCE(t.finished_date, t.created_date))::date AS bucket,
+                DATE_TRUNC('{interval_name}', COALESCE(t.finished_date, t.created_date))::date AS bucket,
                 COUNT(*) AS total,
                 COALESCE(SUM(CASE WHEN ts.is_closed THEN 1 ELSE 0 END), 0) AS closed
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             WHERE
                 t.project_id = %s
-                AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '%s days'
+                AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '{interval_days} days'
             GROUP BY bucket
             ORDER BY bucket
         """
         with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id, self.interval_days])
+            cursor.execute(sql, [self.project.id])
             rows = _dictfetchall(cursor)
 
         series = []
@@ -505,6 +618,7 @@ class TaskCompletionHistoricalMetric(BaseHistoricalMetric):
                 "name": self.name,
                 "date": bucket,
                 "value": round(ratio, 4),
+                "interval": interval_name,
             })
         
         return {self.series_id: series}
@@ -513,7 +627,7 @@ class TaskCompletionHistoricalMetric(BaseHistoricalMetric):
 @register_historical_metric
 class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
     """
-    Historical: closed tasks vs closed issues per week.
+    Historical: closed tasks vs closed issues (adaptive grouping).
     """
     
     series_id = "task_vs_issue"
@@ -521,38 +635,43 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
     interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
+        # Get adaptive interval
+        interval_name, interval_days = get_adaptive_interval(
+            self.project.id, table="tasks_task", date_field="created_date"
+        )
+        
         # Tasks
-        sql_tasks = """
+        sql_tasks = f"""
             SELECT
-                DATE_TRUNC('week', COALESCE(finished_date, created_date))::date AS bucket,
+                DATE_TRUNC('{interval_name}', COALESCE(finished_date, created_date))::date AS bucket,
                 COALESCE(SUM(CASE WHEN ts.is_closed THEN 1 ELSE 0 END), 0) AS closed_tasks
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
             WHERE
                 t.project_id = %s
-                AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '%s days'
+                AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '{interval_days} days'
             GROUP BY bucket
             ORDER BY bucket
         """
         with connection.cursor() as cursor:
-            cursor.execute(sql_tasks, [self.project.id, self.interval_days])
+            cursor.execute(sql_tasks, [self.project.id])
             task_rows = _dictfetchall(cursor)
 
         # Issues
-        sql_issues = """
+        sql_issues = f"""
             SELECT
-                DATE_TRUNC('week', COALESCE(i.finished_date, i.created_date))::date AS bucket,
+                DATE_TRUNC('{interval_name}', COALESCE(i.finished_date, i.created_date))::date AS bucket,
                 COALESCE(SUM(CASE WHEN st.is_closed THEN 1 ELSE 0 END), 0) AS closed_issues
             FROM issues_issue i
             LEFT JOIN projects_issuestatus st ON st.id = i.status_id
             WHERE
                 i.project_id = %s
-                AND COALESCE(i.finished_date, i.created_date) >= NOW() - INTERVAL '%s days'
+                AND COALESCE(i.finished_date, i.created_date) >= NOW() - INTERVAL '{interval_days} days'
             GROUP BY bucket
             ORDER BY bucket
         """
         with connection.cursor() as cursor:
-            cursor.execute(sql_issues, [self.project.id, self.interval_days])
+            cursor.execute(sql_issues, [self.project.id])
             issue_rows = _dictfetchall(cursor)
 
         return {
@@ -562,6 +681,7 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
                     "name": "Tareas cerradas",
                     "date": row["bucket"].isoformat() if row.get("bucket") else None,
                     "value": row.get("closed_tasks") or 0,
+                    "interval": interval_name,
                 }
                 for row in task_rows
             ],
@@ -571,6 +691,7 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
                     "name": "Issues resueltos",
                     "date": row["bucket"].isoformat() if row.get("bucket") else None,
                     "value": row.get("closed_issues") or 0,
+                    "interval": interval_name,
                 }
                 for row in issue_rows
             ],
@@ -580,18 +701,33 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
 @register_historical_metric
 class UserActivityHistoricalMetric(BaseHistoricalMetric):
     """
-    Historical Team: closed tasks per user per week (last ~360 days).
+    Historical Team: task completion RATIO per user (adaptive grouping).
+    
+    Calculates closed_tasks / assigned_tasks for each user.
+    Uses adaptive grouping based on data range:
+        - < 30 days of data -> group by DAY
+        - 30-180 days -> group by WEEK
+        - > 180 days -> group by MONTH
     """
     
     series_id = "user_closed_tasks"
     name = "Tareas cerradas por usuario"
-    interval_days = 360
+    interval_days = 360  # Default, will be overridden by adaptive logic
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
-        sql = """
+        # Get adaptive interval based on project data
+        interval_name, interval_days = get_adaptive_interval(
+            self.project.id, 
+            table="tasks_task",
+            date_field="created_date"
+        )
+        
+        # Build SQL with adaptive DATE_TRUNC
+        sql = f"""
             SELECT
-                DATE_TRUNC('week', COALESCE(t.finished_date, t.created_date))::date AS bucket,
+                DATE_TRUNC('{interval_name}', COALESCE(t.finished_date, t.created_date))::date AS bucket,
                 u.username,
+                COUNT(DISTINCT t.id) AS assigned_tasks,
                 COALESCE(SUM(CASE WHEN ts.is_closed THEN 1 ELSE 0 END), 0) AS closed_tasks
             FROM tasks_task t
             LEFT JOIN projects_taskstatus ts ON ts.id = t.status_id
@@ -599,23 +735,32 @@ class UserActivityHistoricalMetric(BaseHistoricalMetric):
             WHERE
                 t.project_id = %s
                 AND u.username IS NOT NULL
-                AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '%s days'
+                AND COALESCE(t.finished_date, t.created_date) >= NOW() - INTERVAL '{interval_days} days'
             GROUP BY bucket, u.username
             ORDER BY bucket, u.username
         """
         with connection.cursor() as cursor:
-            cursor.execute(sql, [self.project.id, self.interval_days])
+            cursor.execute(sql, [self.project.id])
             rows = _dictfetchall(cursor)
 
         series = []
         for row in rows:
             bucket = row["bucket"].isoformat() if row.get("bucket") else None
+            assigned = row.get("assigned_tasks") or 0
+            closed = row.get("closed_tasks") or 0
+            # Calculate ratio: if no tasks assigned, ratio is 0
+            ratio = (closed / float(assigned)) if assigned > 0 else 0.0
             series.append({
                 "id": self.series_id,
                 "name": self.name,
                 "date": bucket,
-                "value": row.get("closed_tasks") or 0,
+                "value": round(ratio, 4),  # Ratio 0-1 (e.g., 0.5 = 50%)
                 "student": row.get("username"),
+                "interval": interval_name,  # Include interval type for frontend
+                "metadata": {
+                    "closed": closed,
+                    "assigned": assigned,
+                }
             })
 
         return {self.series_id: series}

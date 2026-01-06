@@ -61,6 +61,8 @@ CACHES = {
 # Learning Dashboard Metrics integration defaults
 # IMPORTANT: LD-Taiga backend runs on port 3000 by default (see LD-Taiga-backend/index.js)
 # TEMPORAL!
+
+#LD_TAIGA_BACKEND_URL = "https://eaa864cb69ae.ngrok-free.app"
 LD_TAIGA_BACKEND_URL = os.environ.get("LD_TAIGA_BACKEND_URL", "http://gessi-dashboard.essi.upc.edu:8888")
 try:
     LD_TAIGA_TIMEOUT = int(os.environ.get("LD_TAIGA_TIMEOUT", "15"))
@@ -579,6 +581,7 @@ CORS_ALLOWED_ORIGINS_WHITELIST = [
     "http://localhost:8000",
     "http://127.0.0.1:9001",
     "http://127.0.0.1:8000",
+    "https://uncreosoted-dermatic-johnny.ngrok-free.dev",
 ]
 
 DEFAULT_PROJECT_TEMPLATE = "scrum"
