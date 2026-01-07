@@ -10,7 +10,6 @@ import os.path
 import sys
 from datetime import timedelta
 
-
 def env_to_bool(name, default=False):
     value = os.environ.get(name)
     if value is None:
@@ -62,8 +61,10 @@ CACHES = {
 # IMPORTANT: LD-Taiga backend runs on port 3000 by default (see LD-Taiga-backend/index.js)
 # TEMPORAL!
 
-#LD_TAIGA_BACKEND_URL = "https://eaa864cb69ae.ngrok-free.app"
-LD_TAIGA_BACKEND_URL = os.environ.get("LD_TAIGA_BACKEND_URL", "http://gessi-dashboard.essi.upc.edu:8888")
+# NGROK URLs for external access:
+# - Webhooks: https://c8b4589b5ff4.ngrok-free.app -> http://localhost:5000
+# - Learning Dashboard: https://eaa864cb69ae.ngrok-free.app -> http://localhost:8888
+LD_TAIGA_BACKEND_URL = os.environ.get("LD_TAIGA_BACKEND_URL", "https://eaa864cb69ae.ngrok-free.app")
 try:
     LD_TAIGA_TIMEOUT = int(os.environ.get("LD_TAIGA_TIMEOUT", "15"))
 except (TypeError, ValueError):
@@ -582,6 +583,9 @@ CORS_ALLOWED_ORIGINS_WHITELIST = [
     "http://127.0.0.1:9001",
     "http://127.0.0.1:8000",
     "https://uncreosoted-dermatic-johnny.ngrok-free.dev",
+    # Ngrok URLs para acceso externo
+    "https://c8b4589b5ff4.ngrok-free.app",  # Webhooks
+    "https://eaa864cb69ae.ngrok-free.app",  # Learning Dashboard
 ]
 
 DEFAULT_PROJECT_TEMPLATE = "scrum"
@@ -667,7 +671,8 @@ GITLAB_VALID_ORIGIN_IPS = []
 
 EXPORTS_TTL = 60 * 60 * 24  # 24 hours
 
-WEBHOOKS_ENABLED = False
+# Webhooks habilitados para integración con Learning Dashboard
+WEBHOOKS_ENABLED = True
 WEBHOOKS_ALLOW_PRIVATE_ADDRESS = False
 WEBHOOKS_ALLOW_REDIRECTS = False
 
