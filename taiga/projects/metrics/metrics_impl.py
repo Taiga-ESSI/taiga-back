@@ -80,8 +80,8 @@ class TaskCompletionMetric(BaseMetric):
     """
     
     metric_id = "task_completion"
-    name = "Tareas cerradas"
-    description = "Progreso de cierre de tareas del sprint."
+    name = "Closed Tasks"
+    description = "Sprint task closure progress."
     quality_factors = ["Delivery"]
     
     def calculate(self) -> Optional[Dict]:
@@ -138,8 +138,8 @@ class UserStoryCompletionMetric(BaseMetric):
     """
     
     metric_id = "userstory_completion"
-    name = "Historias completadas"
-    description = "Progreso de funcionalidades entregadas."
+    name = "Completed Stories"
+    description = "Feature delivery progress."
     quality_factors = ["Delivery"]
     
     def calculate(self) -> Optional[Dict]:
@@ -188,8 +188,8 @@ class IssueResolutionMetric(BaseMetric):
     """
     
     metric_id = "issue_resolution"
-    name = "Incidencias resueltas"
-    description = "Bugs e incidencias solucionados."
+    name = "Resolved Issues"
+    description = "Bugs and issues resolved."
     quality_factors = ["Quality"]
     
     def calculate(self) -> Optional[Dict]:
@@ -245,8 +245,8 @@ class TaskAssignmentMetric(BaseMetric):
     """
     
     metric_id = "task_assignment"
-    name = "Tareas asignadas"
-    description = "Tareas con responsable definido."
+    name = "Assigned Tasks"
+    description = "Tasks with assigned owner."
     quality_factors = ["Planning"]
     
     def calculate(self) -> Optional[Dict]:
@@ -294,8 +294,8 @@ class BlockedTasksMetric(BaseMetric):
     """
     
     metric_id = "blocked_tasks"
-    name = "Tareas sin bloquear"
-    description = "Tareas que fluyen sin impedimentos."
+    name = "Unblocked Tasks"
+    description = "Tasks flowing without impediments."
     quality_factors = ["Quality"]
     
     def calculate(self) -> Optional[Dict]:
@@ -343,8 +343,8 @@ class StoriesWithTasksMetric(BaseMetric):
     """
     
     metric_id = "stories_with_tasks"
-    name = "Historias desglosadas"
-    description = "Historias con tareas definidas."
+    name = "Stories with Tasks"
+    description = "Stories with defined tasks."
     quality_factors = ["Planning"]
     
     def calculate(self) -> Optional[Dict]:
@@ -395,8 +395,8 @@ class TeamParticipationMetric(BaseMetric):
     """
     
     metric_id = "team_participation"
-    name = "Participación del equipo"
-    description = "Miembros activos con tareas asignadas."
+    name = "Team Participation"
+    description = "Active members with assigned tasks."
     quality_factors = ["Delivery"]
     
     def calculate(self) -> Optional[Dict]:
@@ -455,8 +455,8 @@ class OverdueTasksMetric(BaseMetric):
     """
     
     metric_id = "tasks_on_time"
-    name = "Tareas en plazo"
-    description = "Tareas sin fecha vencida."
+    name = "Tasks on Time"
+    description = "Tasks without overdue date."
     quality_factors = ["Delivery"]
     
     def calculate(self) -> Optional[Dict]:
@@ -511,8 +511,8 @@ class TaskClosureTimeMetric(BaseMetric):
     """
     
     metric_id = "task_closure_time"
-    name = "Tiempo medio de cierre"
-    description = "Tiempo promedio de cierre de tareas (en horas)."
+    name = "Average Closure Time"
+    description = "Average task closure time (in hours)."
     quality_factors = ["Team"]  # Purple unicolor (informative value)
     
     def calculate(self) -> Optional[Dict]:
@@ -581,7 +581,7 @@ class TaskCompletionHistoricalMetric(BaseHistoricalMetric):
     """
     
     series_id = "task_completion"
-    name = "Cierre de tareas"
+    name = "Task Closure"
     interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
@@ -631,7 +631,7 @@ class TaskVsIssueHistoricalMetric(BaseHistoricalMetric):
     """
     
     series_id = "task_vs_issue"
-    name = "Tareas vs Issues"
+    name = "Tasks vs Issues"
     interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
@@ -711,7 +711,7 @@ class UserActivityHistoricalMetric(BaseHistoricalMetric):
     """
     
     series_id = "user_closed_tasks"
-    name = "Tareas cerradas por usuario"
+    name = "Closed Tasks per User"
     interval_days = 360  # Default, will be overridden by adaptive logic
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
@@ -774,7 +774,7 @@ class UserStoryPointsHistoricalMetric(BaseHistoricalMetric):
     """
     
     series_id = "user_story_points"
-    name = "Story Points por usuario"
+    name = "Story Points per User"
     interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
@@ -837,7 +837,7 @@ class RoleStoryPointsHistoricalMetric(BaseHistoricalMetric):
     """
     
     series_id = "role_story_points"
-    name = "Story Points por rol"
+    name = "Story Points per Role"
     interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
@@ -889,7 +889,7 @@ class UserStoriesClosedHistoricalMetric(BaseHistoricalMetric):
     """
     
     series_id = "user_stories_closed"
-    name = "Historias cerradas por usuario"
+    name = "Closed Stories per User"
     interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
@@ -936,7 +936,7 @@ class SprintVelocityHistoricalMetric(BaseHistoricalMetric):
     """
     
     series_id = "sprint_velocity"
-    name = "Velocidad por Sprint"
+    name = "Sprint Velocity"
     interval_days = 360
     
     def calculate_series(self) -> Dict[str, List[Dict]]:
@@ -1004,7 +1004,7 @@ from taiga.projects.metrics.base import BaseStudentMetric, register_student_metr
 class AssignedTasksStudentMetric(BaseStudentMetric):
     """Proporción de tareas asignadas a cada usuario (suma de todos = 1)."""
     metric_key = "assignedtasks"
-    label = "Tareas asignadas"
+    label = "Assigned Tasks"
     
     def __init__(self, project, context=None):
         super().__init__(project, context)
@@ -1028,7 +1028,7 @@ class AssignedTasksStudentMetric(BaseStudentMetric):
 class ClosedTasksStudentMetric(BaseStudentMetric):
     """Ratio de tareas cerradas / asignadas por usuario."""
     metric_key = "closedtasks"
-    label = "Tareas cerradas"
+    label = "Closed Tasks"
     
     def __init__(self, project, context=None):
         super().__init__(project, context)
@@ -1052,7 +1052,7 @@ class ClosedTasksStudentMetric(BaseStudentMetric):
 class AssignedStoriesStudentMetric(BaseStudentMetric):
     """Proporción de historias asignadas a cada usuario (suma de todos = 1)."""
     metric_key = "totalus"
-    label = "Historias asignadas"
+    label = "Assigned Stories"
     
     def __init__(self, project, context=None):
         super().__init__(project, context)
@@ -1076,7 +1076,7 @@ class AssignedStoriesStudentMetric(BaseStudentMetric):
 class CompletedStoriesStudentMetric(BaseStudentMetric):
     """Ratio de historias completadas / asignadas por usuario."""
     metric_key = "completedus"
-    label = "Historias finalizadas"
+    label = "Completed Stories"
 
     def __init__(self, project, context=None):
         super().__init__(project, context)
