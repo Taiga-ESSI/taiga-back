@@ -18,3 +18,5 @@ class MetricsPermission(TaigaResourcePermission):
     retrieve_perms = HasProjectPerm('view_project')
     list_perms = HasProjectPerm('view_project')
     historical_perms = HasProjectPerm('view_project')
+    config_perms = HasProjectPerm('view_project')
+    config_update_perms = IsProjectAdmin()

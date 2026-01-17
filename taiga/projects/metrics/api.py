@@ -24,6 +24,7 @@ from taiga.projects.models import Project
 
 from . import permissions
 from .internal import get_or_build_snapshot
+from .models import ProjectMetricsConfig
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,156 @@ class MetricsViewSet(ReadOnlyListViewSet):
 
         return (self.DEFAULT_PROVIDER or "external").lower()
 
+    def _get_or_create_project_config(self, project):
+        defaults = {
+            "provider": self._normalize_provider_value(self.DEFAULT_PROVIDER)
+                         or ProjectMetricsConfig.PROVIDER_EXTERNAL,
+        }
+        config, _ = ProjectMetricsConfig.objects.get_or_create(
+            project=project,
+            defaults=defaults,
+        )
+        return config
+
+    @staticmethod
+    def _normalize_provider_value(value):
+        if not value:
+            return None
+        provider = str(value).strip().lower()
+        if provider in {"internal", "external"}:
+            return provider
+        return None
+
+    @staticmethod
+    def _sanitize_classification_map(data):
+        if not isinstance(data, dict):
+            return {}
+
+        allowed_values = {"project", "team", "hidden"}
+        clean = {}
+        for metric_id, kind in data.items():
+            if metric_id is None:
+                continue
+            normalized_id = str(metric_id).strip()
+            if not normalized_id:
+                continue
+            if isinstance(kind, str):
+                lowered = kind.strip().lower()
+            else:
+                lowered = None
+            if lowered not in allowed_values:
+                continue
+            clean[normalized_id] = lowered
+        return clean
+
+    @staticmethod
+    def _sanitize_order_list(raw):
+        if not isinstance(raw, (list, tuple)):
+            return []
+        cleaned = []
+        seen = set()
+        for item in raw:
+            if item is None:
+                continue
+            entry = str(item).strip()
+            if not entry or entry in seen:
+                continue
+            seen.add(entry)
+            cleaned.append(entry)
+        return cleaned
+
+    def _serialize_project_config(self, project, config):
+        updated_by = None
+        if config.updated_by:
+            updated_by = {
+                "id": config.updated_by_id,
+                "username": config.updated_by.username,
+                "full_name": config.updated_by.get_full_name() or config.updated_by.username,
+            }
+
+        return {
+            "project": project.slug,
+            "project_id": project.id,
+            "provider": config.provider or ProjectMetricsConfig.PROVIDER_EXTERNAL,
+            "external_project_id": config.external_project_id or "",
+            "classification": config.classification or {},
+            "project_metrics_order": config.project_metrics_order or [],
+            "team_metrics_order": config.team_metrics_order or [],
+            "updated_at": config.updated_at,
+            "updated_by": updated_by,
+        }
+
+    ##########################################################################
+    # Configuration endpoints
+    ##########################################################################
+    @list_route(methods=["GET", "PATCH"])
+    def config(self, request, **kwargs):
+        project_slug = None
+        if request.method == "PATCH" and request.DATA:
+            project_slug = request.DATA.get("project")
+        if not project_slug:
+            project_slug = request.QUERY_PARAMS.get("project")
+
+        if not project_slug:
+            return response.BadRequest({"error": "METRICS.ERROR_PROJECT_REQUIRED"})
+
+        project = get_object_or_404(Project, slug=project_slug)
+
+        if request.method == "GET":
+            self.check_permissions(request, "config", project)
+            config = self._get_or_create_project_config(project)
+            return response.Ok(self._serialize_project_config(project, config))
+
+        self.check_permissions(request, "config_update", project)
+        payload = request.DATA or {}
+        config = self._get_or_create_project_config(project)
+
+        changed = False
+
+        provider_value = self._normalize_provider_value(payload.get("provider"))
+        if provider_value and provider_value != config.provider:
+            config.provider = provider_value
+            changed = True
+
+        external_id = (
+            payload.get("external_project_id")
+            or payload.get("externalProjectId")
+            or payload.get("external")
+        )
+        if external_id is not None:
+            normalized_external = str(external_id).strip()
+            if normalized_external != config.external_project_id:
+                config.external_project_id = normalized_external
+                changed = True
+
+        classification = payload.get("classification")
+        if classification is not None:
+            clean_map = self._sanitize_classification_map(classification)
+            if clean_map != (config.classification or {}):
+                config.classification = clean_map
+                changed = True
+
+        project_order = payload.get("project_metrics_order") or payload.get("projectMetricsOrder")
+        if project_order is not None:
+            clean_project_order = self._sanitize_order_list(project_order)
+            if clean_project_order != (config.project_metrics_order or []):
+                config.project_metrics_order = clean_project_order
+                changed = True
+
+        team_order = payload.get("team_metrics_order") or payload.get("teamMetricsOrder")
+        if team_order is not None:
+            clean_team_order = self._sanitize_order_list(team_order)
+            if clean_team_order != (config.team_metrics_order or []):
+                config.team_metrics_order = clean_team_order
+                changed = True
+
+        if changed:
+            if request.user.is_authenticated:
+                config.updated_by = request.user
+            config.save()
+
+        return response.Ok(self._serialize_project_config(project, config))
+
     ##########################################################################
     # Authentication endpoints
     ##########################################################################
@@ -276,7 +427,12 @@ class MetricsViewSet(ReadOnlyListViewSet):
 
         auth_state = self._ensure_authenticated(request)
         if not auth_state:
-            return response.Ok({"authenticated": False, "username": None})
+            # Fallback: if authenticated in Taiga, consider authenticated for metrics
+            return response.Ok({
+                "authenticated": True,
+                "username": request.user.username,
+                "external_project_id": request.user.username,
+            })
 
         return response.Ok({
             "authenticated": True,
@@ -306,12 +462,11 @@ class MetricsViewSet(ReadOnlyListViewSet):
         provider = self._resolve_provider(request)
 
         if provider == "internal":
-            refresh_flag = (request.QUERY_PARAMS.get("refresh") or "").lower()
-            force_refresh = refresh_flag in ("1", "true", "yes")
+            # Always force refresh as requested by user to ensure real-time data
             snapshot = get_or_build_snapshot(
                 project,
-                use_cache=not force_refresh,
-                force=force_refresh,
+                use_cache=False,
+                force=True,
             )
             payload = dict(snapshot.payload or {})
             payload.setdefault("project_slug", project_slug)
@@ -321,12 +476,17 @@ class MetricsViewSet(ReadOnlyListViewSet):
             return response.Ok(payload)
 
         auth_state = self._ensure_authenticated(request)
-        if not auth_state:
-            return response.Unauthorized({"error": "METRICS.ERROR_METRICS_AUTH_REQUIRED"})
-
+        
         # Get the project ID to use with gessi-dashboard
         explicit_external = request.QUERY_PARAMS.get("external")
-        external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
+        external_project_id = None
+
+        if auth_state:
+            external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
+        else:
+            # Fallback to project config
+            config = self._get_or_create_project_config(project)
+            external_project_id = explicit_external or config.external_project_id or project.slug
 
         logger.info(f"📊 Metrics request for {project_slug} | external={external_project_id}")
 
@@ -414,6 +574,78 @@ class MetricsViewSet(ReadOnlyListViewSet):
     ##########################################################################
     # Historical metrics endpoint
     ##########################################################################
+    @staticmethod
+    def _parse_date_param(value, default=None):
+        """
+        Parse a date parameter string (YYYY-MM-DD format).
+        Returns None if invalid, or the validated date string.
+        """
+        if not value:
+            return default
+        try:
+            parsed = datetime.strptime(str(value).strip(), "%Y-%m-%d")
+            return parsed.strftime("%Y-%m-%d")
+        except (ValueError, TypeError):
+            return default
+
+    @staticmethod
+    def _resolve_date_preset(preset):
+        """
+        Resolve a date preset to (from_date, to_date) tuple.
+        
+        Supported presets:
+            - last_7_days: Last 7 days
+            - last_14_days: Last 14 days
+            - last_30_days: Last 30 days (approx. 1 month)
+            - last_90_days: Last 90 days (approx. 3 months)
+            - last_semester: Last 6 months
+            - last_year: Last 365 days
+            - current_month: From 1st of current month to today
+            - current_semester: From start of current semester to today
+            - all_time: All available data (from 2020-01-01)
+        
+        Returns (from_date, to_date) as strings in YYYY-MM-DD format.
+        """
+        if not preset:
+            return None, None
+        
+        preset = str(preset).strip().lower()
+        today = datetime.now()
+        to_date = today.strftime("%Y-%m-%d")
+        
+        preset_days = {
+            "last_7_days": 7,
+            "last_14_days": 14,
+            "last_30_days": 30,
+            "last_90_days": 90,
+            "last_semester": 180,
+            "last_year": 365,
+        }
+        
+        if preset in preset_days:
+            from_date = (today - timedelta(days=preset_days[preset])).strftime("%Y-%m-%d")
+            return from_date, to_date
+        
+        if preset == "current_month":
+            from_date = today.replace(day=1).strftime("%Y-%m-%d")
+            return from_date, to_date
+        
+        if preset == "current_semester":
+            # Semester: Feb-Jul or Sep-Jan
+            month = today.month
+            if month >= 9:  # Fall semester
+                from_date = today.replace(month=9, day=1).strftime("%Y-%m-%d")
+            elif month >= 2:  # Spring semester
+                from_date = today.replace(month=2, day=1).strftime("%Y-%m-%d")
+            else:  # January (still fall semester of previous year)
+                from_date = today.replace(year=today.year - 1, month=9, day=1).strftime("%Y-%m-%d")
+            return from_date, to_date
+        
+        if preset == "all_time":
+            return "2020-01-01", to_date
+        
+        return None, None
+
     @list_route(methods=["GET"])
     def historical(self, request, **kwargs):
         """
@@ -423,6 +655,11 @@ class MetricsViewSet(ReadOnlyListViewSet):
             - project: Taiga project slug (required)
             - external: optional external project identifier override
             - source: optional provider override (internal/external)
+            - from: start date (YYYY-MM-DD format)
+            - to: end date (YYYY-MM-DD format)
+            - preset: date preset (last_7_days, last_30_days, current_month, etc.)
+        
+        Date filtering priority: explicit from/to > preset > default (all_time)
         """
         project_slug = request.QUERY_PARAMS.get("project")
         if not project_slug:
@@ -432,6 +669,23 @@ class MetricsViewSet(ReadOnlyListViewSet):
         self.check_permissions(request, "historical", project)
 
         provider = self._resolve_provider(request)
+
+        # Parse date filters
+        date_preset = request.QUERY_PARAMS.get("preset")
+        explicit_from = request.QUERY_PARAMS.get("from")
+        explicit_to = request.QUERY_PARAMS.get("to")
+        
+        # Priority: explicit dates > preset > default
+        if explicit_from or explicit_to:
+            date_from = self._parse_date_param(explicit_from, "2020-01-01")
+            date_to = self._parse_date_param(explicit_to, datetime.now().strftime("%Y-%m-%d"))
+        elif date_preset:
+            preset_from, preset_to = self._resolve_date_preset(date_preset)
+            date_from = preset_from or "2020-01-01"
+            date_to = preset_to or datetime.now().strftime("%Y-%m-%d")
+        else:
+            date_from = "2020-01-01"
+            date_to = datetime.now().strftime("%Y-%m-%d")
 
         if provider == "internal":
             refresh_flag = (request.QUERY_PARAMS.get("refresh") or "").lower()
@@ -446,24 +700,30 @@ class MetricsViewSet(ReadOnlyListViewSet):
                 "project_name": project.name,
                 "external_project_id": (snapshot.payload or {}).get("external_project_id") or project.slug,
                 "historical_data": snapshot.historical_payload or {},
+                "date_range": {
+                    "from": date_from,
+                    "to": date_to,
+                    "preset": date_preset,
+                },
                 "errors": {},
                 "provider": provider,
             }
             return response.Ok(payload)
 
         auth_state = self._ensure_authenticated(request)
-        if not auth_state:
-            return response.Unauthorized({"error": "METRICS.ERROR_METRICS_AUTH_REQUIRED"})
 
         # Get the project ID to use with gessi-dashboard
         explicit_external = request.QUERY_PARAMS.get("external")
-        external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
+        external_project_id = None
 
-        logger.info(f"📊 Historical metrics request for {project_slug} | external={external_project_id}")
+        if auth_state:
+            external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
+        else:
+            # Fallback to project config
+            config = self._get_or_create_project_config(project)
+            external_project_id = explicit_external or config.external_project_id or project.slug
 
-        # Date range for historical data (default: from 2020-01-01 to today)
-        date_from = "2020-01-01"
-        date_to = datetime.now().strftime("%Y-%m-%d")
+        logger.info(f"📊 Historical metrics request for {project_slug} | external={external_project_id} | {date_from} to {date_to}")
 
         # gessi-dashboard API historical endpoints
         endpoints = {
@@ -530,6 +790,11 @@ class MetricsViewSet(ReadOnlyListViewSet):
             "project_name": project.name,
             "external_project_id": external_project_id,
             "historical_data": aggregated,
+            "date_range": {
+                "from": date_from,
+                "to": date_to,
+                "preset": date_preset,
+            },
             "errors": {k: v for k, v in errors.items() if v},
         }
 

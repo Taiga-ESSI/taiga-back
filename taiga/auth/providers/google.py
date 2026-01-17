@@ -148,30 +148,40 @@ def _create_user_from_payload(email: str, payload: dict):
 
 # Pol Alcoverro: punto de entrada del login mediante Google Identity Services.
 def login_with_google(request):
-    raw_token = request.DATA.get("credential") or request.DATA.get("id_token")
-    client_hint = request.DATA.get("client_id")
+    try:
+        raw_token = request.DATA.get("credential") or request.DATA.get("id_token")
+        client_hint = request.DATA.get("client_id")
 
-    payload = _verify_credential(raw_token, client_hint)
+        payload = _verify_credential(raw_token, client_hint)
 
-    if payload.get("aud") not in CLIENT_IDS:
-        logger.warning("Rejected Google credential with unexpected audience: %s", payload.get("aud"))
-        raise exc.BadRequest(_("Invalid Google credential."))
+        with open("google_auth_debug.log", "a") as f:
+            f.write(f"Payload: {payload}\n")
 
-    if payload.get("iss") not in {"accounts.google.com", "https://accounts.google.com"}:
-        logger.warning("Rejected Google credential with invalid issuer: %s", payload.get("iss"))
-        raise exc.BadRequest(_("Invalid Google credential."))
+        if payload.get("aud") not in CLIENT_IDS:
+            logger.warning("Rejected Google credential with unexpected audience: %s", payload.get("aud"))
+            raise exc.BadRequest(_("Invalid Google credential."))
 
-    if payload.get("email_verified") is not True:
-        raise exc.BadRequest(_("Google has not verified this email address."))
+        if payload.get("iss") not in {"accounts.google.com", "https://accounts.google.com"}:
+            logger.warning("Rejected Google credential with invalid issuer: %s", payload.get("iss"))
+            raise exc.BadRequest(_("Invalid Google credential."))
 
-    email = payload.get("email")
-    if not email:
-        raise exc.BadRequest(_("Google did not return an email address."))
+        if payload.get("email_verified") is not True:
+            raise exc.BadRequest(_("Google has not verified this email address."))
 
-    _ensure_domain_allowed(email, payload.get("hd"))
+        email = payload.get("email")
+        if not email:
+            raise exc.BadRequest(_("Google did not return an email address."))
 
-    user = _get_or_create_user(email.lower(), payload)
-    return make_auth_response_data(user)
+        _ensure_domain_allowed(email, payload.get("hd"))
+
+        user = _get_or_create_user(email.lower(), payload)
+        return make_auth_response_data(user)
+    except Exception as e:
+        with open("google_auth_debug.log", "a") as f:
+            f.write(f"Error: {e}\n")
+            import traceback
+            traceback.print_exc(file=f)
+        raise
 
 
 register_auth_plugin("google", login_with_google)

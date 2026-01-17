@@ -67,29 +67,11 @@ try:
 except (TypeError, ValueError):
     LD_TAIGA_TIMEOUT = 15
 
-LD_METRICS_EXTERNAL_IDS = [
-    "AMEP11Beats",
-    "AMEP11ChopChop",
-    "AMEP11UniMatch",
-    "AMEP11Unimatch",
-    "AMEP12Academy4All",
-    "AMEP21Cano3",
-    "AMEP21Krunkillos",
-    "AMEP21Sportifiers",
-    "AMEP21SportifyCoach",
-    "AMEP22GoRace",
-    "AMEP22TicketMonster",
-    "AMEP22TicketMonsterTM",
-    "LD_TEST_Project",
-    "Test",
-    "it12b",
-    "it12c",
-    "it12d",
-]
+
 
 INSTANCE_TYPE = "SRC"
 
-METRICS_PROVIDER = os.environ.get("TAIGA_METRICS_PROVIDER", "external").lower()
+METRICS_PROVIDER = os.environ.get("TAIGA_METRICS_PROVIDER", "internal").lower()
 try:
     METRICS_INTERNAL_SNAPSHOT_TTL_MINUTES = int(os.environ.get("TAIGA_METRICS_SNAPSHOT_TTL", "60"))
 except (TypeError, ValueError):
