@@ -190,17 +190,23 @@ def test_student_metrics_payload(metrics_data):
     metrics1 = {m["metadata"]["metric"]: m["value"] for m in metrics1_list if "metadata" in m}
 
     # Verify student1 metrics
-    # Tasks: 2 assigned (Task 1, Task 2). 1 closed (Task 1).
-    assert metrics1["assignedtasks"] == 2
-    assert metrics1["closedtasks"] == 1
+    # The system now returns RATIOS:
+    # - assignedtasks: student's tasks / total tasks (2/4 = 0.5)
+    # - closedtasks: student's closed / student's assigned (1/2 = 0.5)
+    # - totalus: student's stories / total stories (1/2 = 0.5, only 2 assigned)
+    # - completedus: student's closed / student's assigned (1/1 = 1.0)
+    assert metrics1["assignedtasks"] == 0.5  # 2 out of 4 tasks
+    assert metrics1["closedtasks"] == 0.5    # 1 closed out of 2 assigned
     
     # User Stories: 1 assigned (US1). 1 closed (US1).
-    assert metrics1["totalus"] == 1
-    assert metrics1["completedus"] == 1
+    assert metrics1["totalus"] == 0.5        # 1 out of 2 assigned stories
+    assert metrics1["completedus"] == 1.0    # 1/1 ratio
     
-    # Issues: 1 assigned (Issue 1). 1 closed.
-    assert metrics1["assignedissues"] == 1
-    assert metrics1["closedissues"] == 1
+    # Check description for student1 completed stories
+    completed_us_metric = next(m for m in metrics1_list if m["metadata"]["metric"] == "completedus")
+    assert completed_us_metric["value_description"] == "1/1"
+    
+    # Note: Issue metrics are not tracked at the per-student level
     
     # Check for student2
     student2 = next((s for s in students_data if s["username"] == "student2"), None)
@@ -210,12 +216,16 @@ def test_student_metrics_payload(metrics_data):
     metrics2 = {m["metadata"]["metric"]: m["value"] for m in metrics2_list if "metadata" in m}
     
     # Tasks: 2 assigned (Task 3, Task 4). 1 closed (Task 3). Task 4 is blocked.
-    assert metrics2["assignedtasks"] == 2
-    assert metrics2["closedtasks"] == 1
+    assert metrics2["assignedtasks"] == 0.5  # 2 out of 4 tasks
+    assert metrics2["closedtasks"] == 0.5    # 1 closed out of 2 assigned
     
     # User Stories: 1 assigned (US2). 0 closed (US2 is open).
-    assert metrics2["totalus"] == 1
-    assert metrics2["completedus"] == 0
+    assert metrics2["totalus"] == 0.5        # 1 out of 2 assigned stories
+    assert metrics2["completedus"] == 0.0    # 0/1 ratio
+    
+    # Check description for student2 completed stories
+    completed_us_metric_2 = next(m for m in metrics2_list if m["metadata"]["metric"] == "completedus")
+    assert completed_us_metric_2["value_description"] == "0/1"
 
 def test_historical_metric_user_activity(metrics_data):
     metric = UserActivityHistoricalMetric(metrics_data)
@@ -223,17 +233,21 @@ def test_historical_metric_user_activity(metrics_data):
     assert "user_closed_tasks" in series
     data = series["user_closed_tasks"]
     
-    # We expect entries for student1 (1 closed) and student2 (1 closed)
-    # The date should be start of the week of "2024-01-01" / "2024-01-02"
-    # Both are in same week.
+    # We expect entries for student1 and student2
+    # student1: 2 tasks assigned (Task 1, Task 2), 1 closed (Task 1) -> ratio = 0.5
+    # student2: 2 tasks assigned (Task 3, Task 4), 1 closed (Task 3) -> ratio = 0.5
     
     s1_entry = next((d for d in data if d["student"] == "student1"), None)
     assert s1_entry is not None
-    assert s1_entry["value"] == 1
+    assert s1_entry["value"] == 0.5  # 1 closed / 2 assigned = 50%
+    assert s1_entry["metadata"]["closed"] == 1
+    assert s1_entry["metadata"]["assigned"] == 2
     
     s2_entry = next((d for d in data if d["student"] == "student2"), None)
     assert s2_entry is not None
-    assert s2_entry["value"] == 1
+    assert s2_entry["value"] == 0.5  # 1 closed / 2 assigned = 50%
+    assert s2_entry["metadata"]["closed"] == 1
+    assert s2_entry["metadata"]["assigned"] == 2
 
 def test_metric_api_defaults_to_external(client, project):
     # Authenticate as owner

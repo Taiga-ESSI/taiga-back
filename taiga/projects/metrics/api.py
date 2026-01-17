@@ -495,18 +495,18 @@ class MetricsViewSet(ReadOnlyListViewSet):
         endpoints = {
             "metrics": {
                 "path": "/api/metrics/current",
-                "params": {"prj": external_project_id}
-            },
-            "students": {
-                "path": "/api/metrics/students",
-                "params": {"prj": external_project_id}
-            },
-            "metrics_categories": {
-                "path": "/api/metrics/categories",
-                "params": {"prj": external_project_id}
+                "params": {"prj": external_project_id, "profile": "null"}
             },
             "metrics_catalog": {
                 "path": "/api/metrics",
+                "params": {"prj": external_project_id}
+            },
+            "quality_factors": {
+                "path": "/api/qualityFactors/metrics/current",
+                "params": {"prj": external_project_id, "profile": "null"}
+            },
+            "metrics_categories": {
+                "path": "/api/metrics/categories",
                 "params": {"prj": external_project_id}
             },
         }
@@ -553,7 +553,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
         # Check if project has any data
         has_data = any(
             aggregated.get(key) and len(aggregated[key]) > 0
-            for key in ["metrics", "students"]
+            for key in ["metrics", "quality_factors"]
         )
 
         response_payload = {
@@ -561,7 +561,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
             "project_name": project.name,
             "external_project_id": external_project_id,
             "metrics": aggregated.get("metrics", []),
-            "students": aggregated.get("students", []),
+            "quality_factors": aggregated.get("quality_factors", []),
             "metrics_categories": aggregated.get("metrics_categories", []),
             "metrics_catalog": aggregated.get("metrics_catalog", []),
             "errors": {k: v for k, v in errors.items() if v},
@@ -618,7 +618,7 @@ class MetricsViewSet(ReadOnlyListViewSet):
             "last_14_days": 14,
             "last_30_days": 30,
             "last_90_days": 90,
-            "last_semester": 180,
+            "last_semester": 360,
             "last_year": 365,
         }
         

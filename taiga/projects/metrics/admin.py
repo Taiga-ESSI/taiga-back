@@ -16,6 +16,7 @@ class ProjectMetricsConfigAdmin(admin.ModelAdmin):
     list_display = ["project", "provider", "external_project_id", "updated_at"]
     list_filter = ["provider", "updated_at"]
     search_fields = ["project__name", "project__slug", "external_project_id"]
+    fields = ["project", "provider", "external_project_id"]
     ordering = ["project"]
 
 
