@@ -7,6 +7,7 @@
 
 import pytest
 
+import django.test.utils
 from django.contrib.auth import get_user_model
 
 from taiga.projects.models import Project
@@ -36,6 +37,7 @@ def test_slugify_3():
 
 
 @pytest.mark.django_db
+@django.test.utils.override_settings(DEFAULT_PROJECT_SLUG_PREFIX=True)
 def test_project_slug_with_special_chars():
     user = get_user_model().objects.create(username="test")
     project = Project.objects.create(name="漢字", description="漢字", owner=user)
@@ -45,6 +47,7 @@ def test_project_slug_with_special_chars():
 
 
 @pytest.mark.django_db
+@django.test.utils.override_settings(DEFAULT_PROJECT_SLUG_PREFIX=True)
 def test_project_with_existing_name_slug_with_special_chars():
     user = get_user_model().objects.create(username="test")
     Project.objects.create(name="漢字", description="漢字", owner=user)

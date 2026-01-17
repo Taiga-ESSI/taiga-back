@@ -23,3 +23,13 @@ def pytest_configure(config):
     django.setup()
     from taiga.celery import app
     app.conf.task_always_eager = True
+
+
+@pytest.fixture(autouse=True)
+def settings_override_tests(settings):
+    settings.WEBHOOKS_ENABLED = True
+    settings.IMPORTERS["github"]["active"] = True
+    settings.IMPORTERS["trello"]["active"] = True
+    settings.IMPORTERS["jira"]["active"] = True
+    settings.IMPORTERS["asana"]["active"] = True
+
