@@ -18,15 +18,19 @@ python manage.py loaddata initial_project_templates
 
 # Give permission to taiga:taiga after mounting volumes
 echo Give permission to taiga:taiga
-chown -R taiga:taiga /taiga-back
+chown -R taiga:taiga /taiga-back || true
 
 # Start Taiga processes
 echo Starting Taiga API...
-exec gosu taiga gunicorn taiga.wsgi:application \
-    --name taiga_api \
-    --bind 0.0.0.0:8000 \
-    --workers 3 \
-    --worker-tmp-dir /dev/shm \
-    --log-level=info \
-    --access-logfile - \
-    "$@"
+if [[ "$1" == "python" ]]; then
+    exec gosu taiga "$@"
+else
+    exec gosu taiga gunicorn taiga.wsgi:application \
+        --name taiga_api \
+        --bind 0.0.0.0:8000 \
+        --workers 3 \
+        --worker-tmp-dir /dev/shm \
+        --log-level=info \
+        --access-logfile - \
+        "$@"
+fi

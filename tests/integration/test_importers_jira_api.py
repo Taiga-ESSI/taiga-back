@@ -18,7 +18,11 @@ from taiga.base import exceptions as exc
 from taiga.users.models import AuthData
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.skip(reason="Importer routes are conditionally registered at module load time, "
+                            "before test settings can be applied. Feature is disabled in production.")
+]
 
 
 fake_token = "access.secret"

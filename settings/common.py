@@ -10,6 +10,21 @@ import os.path
 import sys
 from datetime import timedelta
 
+def env_to_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
+
+
+def env_to_list(name, default=None):
+    value = os.environ.get(name)
+    if value is None:
+        if default is None:
+            return []
+        return [item.strip() for item in default if item and item.strip()]
+    return [item.strip() for item in value.split(',') if item.strip()]
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -27,7 +42,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "taiga",
         "USER": "taiga",
-        "PASSWORD": "taiga",
+        "PASSWORD": "taigaupc",
         "HOST": "127.0.0.1"
     }
 }
@@ -41,8 +56,49 @@ CACHES = {
         "LOCATION": "unique-snowflake"
     }
 }
+# Pol Alcoverro: Added for Learning Dashboard Metrics integration
+# Learning Dashboard Metrics integration defaults
+# IMPORTANT: LD-Taiga backend runs on port 3000 by default (see LD-Taiga-backend/index.js)
+# TEMPORAL!
+
+# NGROK URLs for external access:
+# - Webhooks: https://c8b4589b5ff4.ngrok-free.app -> http://localhost:5000
+# - Learning Dashboard: https://eaa864cb69ae.ngrok-free.app -> http://localhost:8888
+LD_TAIGA_BACKEND_URL = os.environ.get("LD_TAIGA_BACKEND_URL", "https://eaa864cb69ae.ngrok-free.app")
+try:
+    LD_TAIGA_TIMEOUT = int(os.environ.get("LD_TAIGA_TIMEOUT", "15"))
+except (TypeError, ValueError):
+    LD_TAIGA_TIMEOUT = 15
+
+
 
 INSTANCE_TYPE = "SRC"
+
+METRICS_PROVIDER = os.environ.get("TAIGA_METRICS_PROVIDER", "internal").lower()
+try:
+    METRICS_INTERNAL_SNAPSHOT_TTL_MINUTES = int(os.environ.get("TAIGA_METRICS_SNAPSHOT_TTL", "60"))
+except (TypeError, ValueError):
+    METRICS_INTERNAL_SNAPSHOT_TTL_MINUTES = 60
+
+
+GOOGLE_AUTH_ALLOWED_DOMAINS = [domain.lower() for domain in env_to_list(
+    "GOOGLE_AUTH_ALLOWED_DOMAINS",
+    ["upc.edu", "estudiantat.upc.edu"],
+)]
+GOOGLE_AUTH_CLIENT_IDS = env_to_list(
+    "GOOGLE_AUTH_CLIENT_IDS",
+    ["286907234950-enq7c1j4085fbj662otfptqqo24hk93u.apps.googleusercontent.com"],
+)
+GOOGLE_AUTH_AUTO_CREATE_USERS = env_to_bool("GOOGLE_AUTH_AUTO_CREATE", default=True)
+_google_auth_enabled_flag = env_to_bool("GOOGLE_AUTH_ENABLED", default=bool(GOOGLE_AUTH_CLIENT_IDS))
+
+# Pol Alcoverro: configuración server-side para habilitar el login con Google.
+GOOGLE_AUTH = {
+    "ENABLED": bool(GOOGLE_AUTH_CLIENT_IDS) and _google_auth_enabled_flag,
+    "CLIENT_IDS": GOOGLE_AUTH_CLIENT_IDS,
+    "ALLOWED_DOMAINS": GOOGLE_AUTH_ALLOWED_DOMAINS,
+    "AUTO_CREATE_USERS": GOOGLE_AUTH_AUTO_CREATE_USERS,
+}
 
 # CELERY
 CELERY_ENABLED = False
@@ -195,9 +251,10 @@ SITE_ID = "api"
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 # SESSION_COOKIE_AGE = 1209600  # (2 weeks) and set SESSION_EXPIRE_AT_BROWSER_CLOSE to false
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_SECURE = True
+# Set to False for development (localhost uses HTTP)
+SESSION_COOKIE_SECURE = False  # Change to True in production with HTTPS
 CSRF_COOKIE_AGE = None
-CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = False  # Change to True in production with HTTPS
 
 # MAIL OPTIONS
 DEFAULT_FROM_EMAIL = "john@doe.com"
@@ -344,6 +401,7 @@ INSTALLED_APPS = [
     "taiga.projects.wiki",
     "taiga.projects.contact",
     "taiga.projects.settings",
+    "taiga.projects.metrics",
     "taiga.searches",
     "taiga.timeline",
     "taiga.mdrender",
@@ -516,6 +574,20 @@ APP_EXTRA_EXPOSE_HEADERS = [
     "taiga-info-order-updated"
 ]
 
+# Pol Alcoverro: CORS allowed origins whitelist (see taiga.base.middleware.cors)
+# When using credentials, the middleware will echo back the requesting origin
+# if it's in this whitelist. Localhost origins are automatically allowed.
+CORS_ALLOWED_ORIGINS_WHITELIST = [
+    "http://localhost:9001",
+    "http://localhost:8000",
+    "http://127.0.0.1:9001",
+    "http://127.0.0.1:8000",
+    "https://uncreosoted-dermatic-johnny.ngrok-free.dev",
+    # Ngrok URLs para acceso externo
+    "https://c8b4589b5ff4.ngrok-free.app",  # Webhooks
+    "https://eaa864cb69ae.ngrok-free.app",  # Learning Dashboard
+]
+
 DEFAULT_PROJECT_TEMPLATE = "scrum"
 # Setting DEFAULT_PROJECT_SLUG_PREFIX to false removes the username from project slug
 DEFAULT_PROJECT_SLUG_PREFIX = True
@@ -599,7 +671,8 @@ GITLAB_VALID_ORIGIN_IPS = []
 
 EXPORTS_TTL = 60 * 60 * 24  # 24 hours
 
-WEBHOOKS_ENABLED = False
+# Webhooks habilitados para integración con Learning Dashboard
+WEBHOOKS_ENABLED = True
 WEBHOOKS_ALLOW_PRIVATE_ADDRESS = False
 WEBHOOKS_ALLOW_REDIRECTS = False
 

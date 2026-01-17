@@ -10,10 +10,10 @@
         "created_date": "2014-04-22T14:48:43.596Z",
         "modified_date": "2016-08-24T16:26:40.845Z",
         "default_owner_role": "product-owner",
-        "is_epics_activated": false,
+        "is_epics_activated": true,
         "is_backlog_activated": true,
         "is_kanban_activated": false,
-        "is_wiki_activated": true,
+        "is_wiki_activated": false,
         "is_issues_activated": true,
         "videoconferences": null,
         "videoconferences_extra_data": "",
@@ -403,7 +403,7 @@
         "roles": [
             {
                 "slug": "ux",
-                "computable": true,
+                "computable": false,
                 "name": "UX",
                 "order": 10,
                 "permissions": [
@@ -431,6 +431,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -444,7 +445,7 @@
             },
             {
                 "slug": "design",
-                "computable": true,
+                "computable": false,
                 "name": "Design",
                 "order": 20,
                 "permissions": [
@@ -472,6 +473,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -513,6 +515,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -554,6 +557,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -595,6 +599,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -625,6 +630,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "comment_epic",
                     "comment_us",
@@ -635,8 +641,42 @@
             }
         ],
         "epic_custom_attributes": [],
-        "us_custom_attributes": [],
-        "task_custom_attributes": [],
+        "us_custom_attributes": [
+            {
+                "name": "Priority",
+                "description": "Sets the priority of the user story",
+                "type": "dropdown",
+                "order": 1,
+                "extra": [
+                    "Low",
+                    "Medium",
+                    "High"
+                ]
+            },
+            {
+                "name": "Acceptance Criteria",
+                "description": "Enumerates the acceptance criteria for the user story",
+                "type": "richtext",
+                "order": 2,
+                "extra": null
+            }
+        ],
+        "task_custom_attributes": [
+            {
+                "name": "Estimated Effort",
+                "description": "Estimated number of hours for completing the task",
+                "type": "number",
+                "order": 1,
+                "extra": null
+            },
+            {
+                "name": "Actual Effort",
+                "description": "Actual number of hours invested in completing the task",
+                "type": "number",
+                "order": 2,
+                "extra": null
+            }
+        ],
         "issue_custom_attributes": []
     }
 },
@@ -1044,7 +1084,7 @@
         "roles": [
             {
                 "slug": "ux",
-                "computable": true,
+                "computable": false,
                 "name": "UX",
                 "order": 10,
                 "permissions": [
@@ -1072,6 +1112,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -1085,7 +1126,7 @@
             },
             {
                 "slug": "design",
-                "computable": true,
+                "computable": false,
                 "name": "Design",
                 "order": 20,
                 "permissions": [
@@ -1113,6 +1154,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -1154,6 +1196,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -1195,6 +1238,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -1236,6 +1280,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "add_epic",
                     "modify_epic",
@@ -1266,6 +1311,7 @@
                     "add_wiki_link",
                     "delete_wiki_link",
                     "view_wiki_links",
+                    "view_metrics",
                     "view_epics",
                     "comment_epic",
                     "comment_us",
@@ -1276,8 +1322,42 @@
             }
         ],
         "epic_custom_attributes": [],
-        "us_custom_attributes": [],
-        "task_custom_attributes": [],
+        "us_custom_attributes": [
+            {
+                "name": "Priority",
+                "description": "Sets the priority of the user story",
+                "type": "dropdown",
+                "order": 1,
+                "extra": [
+                    "Low",
+                    "Medium",
+                    "High"
+                ]
+            },
+            {
+                "name": "Acceptance Criteria",
+                "description": "Enumerates the acceptance criteria for the user story",
+                "type": "richtext",
+                "order": 2,
+                "extra": null
+            }
+        ],
+        "task_custom_attributes": [
+            {
+                "name": "Estimated Effort",
+                "description": "Estimated number of hours for completing the task",
+                "type": "number",
+                "order": 1,
+                "extra": null
+            },
+            {
+                "name": "Actual Effort",
+                "description": "Actual number of hours invested in completing the task",
+                "type": "number",
+                "order": 2,
+                "extra": null
+            }
+        ],
         "issue_custom_attributes": []
     }
 }

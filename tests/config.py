@@ -5,6 +5,7 @@
 #
 # Copyright (c) 2021-present Kaleidos INC
 
+import os
 from settings.common import * # noqa, pylint: disable=unused-wildcard-import
 
 DEBUG = True
@@ -51,10 +52,10 @@ FRONT_SITEMAP_PAGE_SIZE = 100
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'taiga',
-        'USER': 'taiga',
-        'PASSWORD': 'taiga',
-        'HOST': 'localhost',
+        'NAME': os.getenv('POSTGRES_DB', 'taiga'),
+        'USER': os.getenv('POSTGRES_USER', 'taiga'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'taigaupc'),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
         'PORT': '5432',
     }
 }
