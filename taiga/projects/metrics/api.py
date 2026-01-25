@@ -9,7 +9,9 @@
 # Descripción: Endpoints DRF que actúan como proxy con Learning Dashboard para autenticación,
 #              sesión y agregación de métricas del proyecto.
 
+import json
 import logging
+import os
 import re
 from datetime import datetime, timedelta
 
@@ -45,6 +47,87 @@ class MetricsViewSet(ReadOnlyListViewSet):
     ##########################################################################
     # Helper methods
     ##########################################################################
+    @staticmethod
+    def _parse_bool_flag(value):
+        if value is None:
+            return False
+        return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+    def _force_mock_payloads(self):
+        return bool(getattr(settings, "METRICS_FORCE_MOCK", False))
+
+    def _allow_mock_payloads(self):
+        if self._force_mock_payloads():
+            return True
+        allow = getattr(settings, "METRICS_ALLOW_MOCK", None)
+        if allow is not None:
+            return bool(allow)
+        return bool(getattr(settings, "DEBUG", False)) or str(getattr(settings, "INSTANCE_TYPE", "")).lower() == "src"
+
+    def _resolve_mock_dir(self):
+        mock_dir = getattr(settings, "METRICS_MOCK_DIR", None)
+        if mock_dir:
+            return mock_dir
+        return os.path.abspath(os.path.join(settings.BASE_DIR, os.pardir, "crides"))
+
+    def _find_mock_file(self, mock_dir, kind, project_slug, external_project_id, provider):
+        if not os.path.isdir(mock_dir):
+            return None
+
+        project_token = f"project={project_slug}".lower() if project_slug else None
+        external_token = f"external={external_project_id}".lower() if external_project_id else None
+        source_token = f"source={provider}".lower() if provider else None
+
+        for root, _, files in os.walk(mock_dir):
+            for filename in files:
+                rel_path = os.path.relpath(os.path.join(root, filename), mock_dir)
+                rel_lower = rel_path.lower()
+
+                if kind == "historical":
+                    if "metrics/historical" not in rel_lower and "metrics:historical" not in rel_lower:
+                        continue
+                else:
+                    if "metrics/historical" in rel_lower:
+                        continue
+                    if "api:v1:metrics" not in rel_lower and "/api/v1/metrics" not in rel_lower and "metrics?external" not in rel_lower:
+                        continue
+
+                if project_token and project_token not in rel_lower:
+                    continue
+                if external_token and external_token not in rel_lower:
+                    continue
+                if source_token and source_token not in rel_lower:
+                    continue
+
+                return os.path.join(root, filename)
+
+        return None
+
+    def _load_mock_payload(self, request, kind, project_slug, external_project_id, provider):
+        mock_flag = request.QUERY_PARAMS.get("mock")
+        if self._force_mock_payloads() and not mock_flag:
+            mock_flag = kind
+        if not mock_flag:
+            return None
+        if not self._allow_mock_payloads():
+            return None
+        if not (self._parse_bool_flag(mock_flag) or str(mock_flag).strip().lower() == kind):
+            return None
+
+        mock_dir = self._resolve_mock_dir()
+        mock_file = self._find_mock_file(mock_dir, kind, project_slug, external_project_id, provider)
+        if not mock_file:
+            logger.warning("Mock payload not found for %s in %s", kind, mock_dir)
+            return None
+
+        try:
+            logger.info("Using mock payload for %s from %s", kind, mock_file)
+            with open(mock_file, "r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except (OSError, ValueError) as exc:
+            logger.warning("Unable to load mock payload from %s: %s", mock_file, exc)
+            return None
+
     @staticmethod
     def _normalize_identifier(value):
         if not value:
@@ -488,6 +571,10 @@ class MetricsViewSet(ReadOnlyListViewSet):
             config = self._get_or_create_project_config(project)
             external_project_id = explicit_external or config.external_project_id or project.slug
 
+        mock_payload = self._load_mock_payload(request, "metrics", project_slug, external_project_id, provider)
+        if isinstance(mock_payload, dict):
+            return response.Ok(mock_payload)
+
         logger.info(f"📊 Metrics request for {project_slug} | external={external_project_id}")
 
         # gessi-dashboard API endpoints
@@ -687,6 +774,34 @@ class MetricsViewSet(ReadOnlyListViewSet):
             date_from = "2020-01-01"
             date_to = datetime.now().strftime("%Y-%m-%d")
 
+        explicit_external = request.QUERY_PARAMS.get("external")
+        external_project_id = explicit_external
+        auth_state = None
+
+        if provider != "internal":
+            auth_state = self._ensure_authenticated(request)
+            if auth_state:
+                external_project_id = external_project_id or auth_state.get("external_project_id") or auth_state.get("username")
+            else:
+                config = self._get_or_create_project_config(project)
+                external_project_id = external_project_id or config.external_project_id or project.slug
+
+        if not external_project_id:
+            external_project_id = project.slug
+
+        mock_payload = self._load_mock_payload(request, "historical", project_slug, external_project_id, provider)
+        if isinstance(mock_payload, dict):
+            aggregated = mock_payload.get("historical_data") or {}
+            if provider != "internal":
+                user_metrics = aggregated.get("userMetrics") or {}
+                project_metrics = aggregated.get("projectMetrics") or {}
+                if not user_metrics and project_metrics:
+                    derived = self._derive_user_metrics_from_project_metrics(project_metrics)
+                    if derived:
+                        aggregated["userMetrics"] = derived
+                        mock_payload["historical_data"] = aggregated
+            return response.Ok(mock_payload)
+
         if provider == "internal":
             refresh_flag = (request.QUERY_PARAMS.get("refresh") or "").lower()
             force_refresh = refresh_flag in ("1", "true", "yes")
@@ -709,19 +824,6 @@ class MetricsViewSet(ReadOnlyListViewSet):
                 "provider": provider,
             }
             return response.Ok(payload)
-
-        auth_state = self._ensure_authenticated(request)
-
-        # Get the project ID to use with gessi-dashboard
-        explicit_external = request.QUERY_PARAMS.get("external")
-        external_project_id = None
-
-        if auth_state:
-            external_project_id = explicit_external or auth_state.get("external_project_id") or auth_state.get("username")
-        else:
-            # Fallback to project config
-            config = self._get_or_create_project_config(project)
-            external_project_id = explicit_external or config.external_project_id or project.slug
 
         logger.info(f"📊 Historical metrics request for {project_slug} | external={external_project_id} | {date_from} to {date_to}")
 
@@ -785,6 +887,14 @@ class MetricsViewSet(ReadOnlyListViewSet):
                 }
                 logger.error(f"Error fetching {key}: {backend_response.status_code}")
 
+        if provider != "internal":
+            user_metrics = aggregated.get("userMetrics") or {}
+            project_metrics = aggregated.get("projectMetrics") or {}
+            if not user_metrics and project_metrics:
+                derived = self._derive_user_metrics_from_project_metrics(project_metrics)
+                if derived:
+                    aggregated["userMetrics"] = derived
+
         response_payload = {
             "project_slug": project_slug,
             "project_name": project.name,
@@ -812,63 +922,263 @@ class MetricsViewSet(ReadOnlyListViewSet):
             return {}
         
         processed = {}
+        wrapper_keys = ("students", "users", "results", "data", "items", "metrics")
+        series_keys = ("values", "history", "series", "data", "points")
+
+        # Normalize wrapper objects to a list when possible
+        if isinstance(raw_data, dict):
+            for key in wrapper_keys:
+                value = raw_data.get(key)
+                if isinstance(value, (list, dict)):
+                    raw_data = value
+                    break
+
+        # If the backend already returns grouped-by-metric payloads, keep them
+        if isinstance(raw_data, dict):
+            is_user_bucket = False
+            for metric_id, points in raw_data.items():
+                if isinstance(points, dict):
+                    for key in series_keys:
+                        series = points.get(key)
+                        if isinstance(series, list):
+                            points = series
+                            break
+                if not isinstance(points, list):
+                    continue
+                for point in points:
+                    if not isinstance(point, dict):
+                        continue
+                    point_metric_id = (
+                        point.get("id")
+                        or point.get("metric_id")
+                        or point.get("metricId")
+                        or point.get("metric")
+                        or point.get("key")
+                    )
+                    if point_metric_id and point_metric_id != metric_id:
+                        is_user_bucket = True
+                        break
+                if is_user_bucket:
+                    break
+
+            if not is_user_bucket:
+                grouped_points = {}
+                for metric_id, points in raw_data.items():
+                    if isinstance(points, dict):
+                        for key in series_keys:
+                            series = points.get(key)
+                            if isinstance(series, list):
+                                points = series
+                                break
+                    if not isinstance(points, list):
+                        continue
+                    normalized_points = []
+                    for point in points:
+                        if not isinstance(point, dict):
+                            continue
+                        metric_point = point.copy()
+                        if "student" not in metric_point:
+                            username = metric_point.get("username") or metric_point.get("name") or metric_point.get("user")
+                            if username:
+                                metric_point["student"] = username
+                        normalized_points.append(metric_point)
+                    if normalized_points:
+                        grouped_points[metric_id] = normalized_points
+                if grouped_points:
+                    return grouped_points
+
+        def append_metric_point(metric_id, point, username):
+            if metric_id not in processed:
+                processed[metric_id] = []
+
+            if isinstance(point, dict):
+                metric_point = point.copy()
+            else:
+                metric_point = {"value": point}
+
+            if username:
+                metric_point["student"] = username
+            elif not metric_point.get("student"):
+                inferred = (
+                    metric_point.get("studentUser")
+                    or metric_point.get("username")
+                    or metric_point.get("name")
+                    or metric_point.get("user")
+                )
+                if inferred:
+                    metric_point["student"] = inferred
+
+            processed[metric_id].append(metric_point)
+
+        def handle_metric(metric, username):
+            if not isinstance(metric, dict):
+                return
+
+            metric_id = (
+                metric.get("id")
+                or metric.get("metric_id")
+                or metric.get("metricId")
+                or metric.get("metric")
+                or metric.get("key")
+            )
+            if not metric_id:
+                return
+
+            for key in series_keys:
+                series = metric.get(key)
+                if isinstance(series, list):
+                    for point in series:
+                        append_metric_point(metric_id, point, username)
+                    return
+
+            append_metric_point(metric_id, metric, username)
         
         # Handle array format from gessi-dashboard
         if isinstance(raw_data, list):
+            has_user_identity = any(
+                isinstance(item, dict)
+                and (item.get("name") or item.get("username") or item.get("user") or item.get("student"))
+                for item in raw_data
+            )
+            has_metric_container = any(
+                isinstance(item, dict)
+                and any(
+                    isinstance(item.get(key), (list, dict))
+                    for key in ("metrics", "data", "values", "history", "series", "points")
+                )
+                for item in raw_data
+            )
+            has_metric_id = any(
+                isinstance(item, dict)
+                and (
+                    item.get("id")
+                    or item.get("metric_id")
+                    or item.get("metricId")
+                    or item.get("metric")
+                    or item.get("key")
+                )
+                for item in raw_data
+            )
+
+            # Direct list of metric points or metric series without user wrapper
+            if has_metric_id and (not has_metric_container or not has_user_identity):
+                for item in raw_data:
+                    if not isinstance(item, dict):
+                        continue
+
+                    metric_id = (
+                        item.get("id")
+                        or item.get("metric_id")
+                        or item.get("metricId")
+                        or item.get("metric")
+                        or item.get("key")
+                    )
+                    if not metric_id:
+                        continue
+
+                    username = (
+                        item.get("student")
+                        or item.get("username")
+                        or item.get("user")
+                        or item.get("name")
+                    )
+
+                    series = None
+                    for key in series_keys:
+                        if isinstance(item.get(key), list):
+                            series = item.get(key)
+                            break
+
+                    if series is not None:
+                        for point in series:
+                            append_metric_point(metric_id, point, username)
+                    else:
+                        append_metric_point(metric_id, item, username)
+
+                if processed:
+                    return processed
+
             for user_data in raw_data:
                 if not isinstance(user_data, dict):
                     continue
                 
-                username = user_data.get("name") or user_data.get("username")
-                metrics = user_data.get("metrics", [])
+                username = (
+                    user_data.get("name")
+                    or user_data.get("username")
+                    or user_data.get("user")
+                    or user_data.get("student")
+                )
+                metrics = user_data.get("metrics")
+                if metrics is None:
+                    metrics = (
+                        user_data.get("data")
+                        or user_data.get("values")
+                        or user_data.get("history")
+                        or user_data.get("series")
+                        or user_data.get("points")
+                    )
+
+                if isinstance(metrics, dict):
+                    for metric_id, points in metrics.items():
+                        if isinstance(points, list):
+                            for point in points:
+                                append_metric_point(metric_id, point, username)
+                        else:
+                            append_metric_point(metric_id, points, username)
+                    continue
+
                 if not isinstance(metrics, list):
                     continue
-                
+
                 for metric in metrics:
-                    if not isinstance(metric, dict):
-                        continue
-                    
-                    metric_id = metric.get("id")
-                    if not metric_id:
-                        continue
-                    
-                    if metric_id not in processed:
-                        processed[metric_id] = []
-                    
-                    # Add student/username info to metric for frontend
-                    metric_with_user = metric.copy()
-                    if username:
-                        metric_with_user["student"] = username
-                    
-                    processed[metric_id].append(metric_with_user)
+                    handle_metric(metric, username)
         
         # Handle dict format (legacy)
         elif isinstance(raw_data, dict):
             for username, user_data in raw_data.items():
+                if isinstance(user_data, list):
+                    for point in user_data:
+                        if not isinstance(point, dict):
+                            continue
+                        metric_id = (
+                            point.get("id")
+                            or point.get("metric_id")
+                            or point.get("metricId")
+                            or point.get("metric")
+                            or point.get("key")
+                        )
+                        if not metric_id:
+                            continue
+                        append_metric_point(metric_id, point, username)
+                    continue
+
                 if not isinstance(user_data, dict):
                     continue
                 
-                metrics = user_data.get("metrics", [])
+                metrics = user_data.get("metrics")
+                if metrics is None:
+                    metrics = (
+                        user_data.get("data")
+                        or user_data.get("values")
+                        or user_data.get("history")
+                        or user_data.get("series")
+                        or user_data.get("points")
+                    )
+
+                if isinstance(metrics, dict):
+                    for metric_id, points in metrics.items():
+                        if isinstance(points, list):
+                            for point in points:
+                                append_metric_point(metric_id, point, username)
+                        else:
+                            append_metric_point(metric_id, points, username)
+                    continue
+
                 if not isinstance(metrics, list):
                     continue
-                
+
                 for metric in metrics:
-                    if not isinstance(metric, dict):
-                        continue
-                    
-                    metric_id = metric.get("id")
-                    if not metric_id:
-                        continue
-                    
-                    if metric_id not in processed:
-                        processed[metric_id] = []
-                    
-                    # Add student/username info to metric for frontend
-                    metric_with_user = metric.copy()
-                    if username:
-                        metric_with_user["student"] = username
-                    
-                    processed[metric_id].append(metric_with_user)
+                    handle_metric(metric, username)
         
         return processed
     
@@ -878,7 +1188,17 @@ class MetricsViewSet(ReadOnlyListViewSet):
         Input: [{id: "metric1", date: "...", value: ...}, ...]
         Output: {"metric1": [{date, value, name}, ...], ...}
         """
-        if not raw_data or not isinstance(raw_data, list):
+        if not raw_data:
+            return {}
+
+        if isinstance(raw_data, dict):
+            for key in ("results", "data", "items", "metrics"):
+                value = raw_data.get(key)
+                if isinstance(value, list):
+                    raw_data = value
+                    break
+
+        if not isinstance(raw_data, list):
             return {}
         
         grouped = {}
@@ -887,7 +1207,13 @@ class MetricsViewSet(ReadOnlyListViewSet):
             if not isinstance(item, dict):
                 continue
             
-            metric_id = item.get("id")
+            metric_id = (
+                item.get("id")
+                or item.get("metric_id")
+                or item.get("metricId")
+                or item.get("metric")
+                or item.get("key")
+            )
             if not metric_id:
                 continue
             
@@ -897,3 +1223,79 @@ class MetricsViewSet(ReadOnlyListViewSet):
             grouped[metric_id].append(item)
         
         return grouped
+
+    def _derive_user_metrics_from_project_metrics(self, project_metrics):
+        if not isinstance(project_metrics, dict):
+            return {}
+
+        prefixes = (
+            "assignedtasks",
+            "closedtasks",
+            "completedtasks",
+            "commits",
+            "modifiedlines",
+            "tasksratio",
+            "completedus",
+            "totalus",
+        )
+        invalid_suffixes = {
+            "anonymous",
+            "sd",
+            "taskreference",
+            "contribution",
+            "management",
+            "total",
+            "all",
+            "unassigned",
+            "unknown",
+            "system",
+            "team",
+            "project",
+            "average",
+            "mean",
+            "median",
+            "deviation",
+            "variance",
+        }
+
+        derived = {}
+
+        for metric_id, points in project_metrics.items():
+            if not metric_id:
+                continue
+            metric_id_str = str(metric_id)
+            metric_id_lower = metric_id_str.lower()
+
+            matched_prefix = None
+            for prefix in prefixes:
+                prefix_with = f"{prefix}_"
+                if metric_id_lower.startswith(prefix_with):
+                    suffix = metric_id_lower[len(prefix_with):]
+                    if not suffix or suffix in invalid_suffixes:
+                        matched_prefix = None
+                    else:
+                        matched_prefix = prefix
+                    break
+
+            if not matched_prefix or not isinstance(points, list):
+                continue
+
+            if all(isinstance(point, dict) and point.get("scope") == "team" for point in points):
+                continue
+
+            username = metric_id_str[len(matched_prefix) + 1:]
+            if not username:
+                continue
+
+            derived_points = []
+            for point in points:
+                if not isinstance(point, dict):
+                    continue
+                metric_point = point.copy()
+                metric_point.setdefault("student", username)
+                derived_points.append(metric_point)
+
+            if derived_points:
+                derived[metric_id_str] = derived_points
+
+        return derived

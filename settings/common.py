@@ -64,7 +64,7 @@ CACHES = {
 # NGROK URLs for external access:
 # - Webhooks: https://c8b4589b5ff4.ngrok-free.app -> http://localhost:5000
 # - Learning Dashboard: https://eaa864cb69ae.ngrok-free.app -> http://localhost:8888
-LD_TAIGA_BACKEND_URL = os.environ.get("LD_TAIGA_BACKEND_URL", "https://eaa864cb69ae.ngrok-free.app")
+LD_TAIGA_BACKEND_URL = os.environ.get("LD_TAIGA_BACKEND_URL", "https://b9acb486ca55.ngrok-free.app")
 try:
     LD_TAIGA_TIMEOUT = int(os.environ.get("LD_TAIGA_TIMEOUT", "15"))
 except (TypeError, ValueError):
@@ -75,6 +75,9 @@ except (TypeError, ValueError):
 INSTANCE_TYPE = "SRC"
 
 METRICS_PROVIDER = os.environ.get("TAIGA_METRICS_PROVIDER", "internal").lower()
+METRICS_ALLOW_MOCK = env_to_bool("TAIGA_METRICS_ALLOW_MOCK", False)
+METRICS_FORCE_MOCK = env_to_bool("TAIGA_METRICS_FORCE_MOCK", False)
+METRICS_MOCK_DIR = os.environ.get("TAIGA_METRICS_MOCK_DIR")
 try:
     METRICS_INTERNAL_SNAPSHOT_TTL_MINUTES = int(os.environ.get("TAIGA_METRICS_SNAPSHOT_TTL", "60"))
 except (TypeError, ValueError):
@@ -586,6 +589,10 @@ CORS_ALLOWED_ORIGINS_WHITELIST = [
     # Ngrok URLs para acceso externo
     "https://c8b4589b5ff4.ngrok-free.app",  # Webhooks
     "https://eaa864cb69ae.ngrok-free.app",  # Learning Dashboard
+    "https://c172f829d900.ngrok-free.app",  # Learning Dashboard
+    "https://b9acb486ca55.ngrok-free.app",  # Learning Dashboard
+    "https://192448c929e5.ngrok-free.app",  # Learning Dashboard
+    "https://b9acb486ca55.ngrok-free.app",  # Learning Dashboard
 ]
 
 DEFAULT_PROJECT_TEMPLATE = "scrum"
