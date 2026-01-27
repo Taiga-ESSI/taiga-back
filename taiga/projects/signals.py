@@ -74,6 +74,14 @@ def project_post_save(sender, instance, created, **kwargs):
         Membership.objects.create(user=instance.owner, project=instance, role=owner_role,
                                   is_admin=True, email=instance.owner.email)
 
+    # Ensure metrics config exists so it appears in Django admin immediately.
+    try:
+        ProjectMetricsConfig = apps.get_model("metrics", "ProjectMetricsConfig")
+    except LookupError:
+        ProjectMetricsConfig = None
+    if ProjectMetricsConfig:
+        ProjectMetricsConfig.objects.get_or_create(project=instance)
+
 
 ## swimlanes
 def create_swimlane_user_story_statuses_on_swimalne_post_save(sender, instance, created, **kwargs):
