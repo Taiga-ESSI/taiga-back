@@ -259,6 +259,27 @@ from taiga.projects.metrics.api import MetricsViewSet
 
 router.register(r"metrics", MetricsViewSet, base_name="metrics")
 
+# Academics module (Instructor layer)
+from taiga.academics.api import (
+    SubjectViewSet,
+    CourseEditionViewSet,
+    CourseGroupViewSet,
+    TeacherProfileViewSet,
+    GroupProjectLinkViewSet,
+    SubjectCoordinatorAssignmentViewSet,
+    EditionProfessorAssignmentViewSet,
+    ProfessorGroupAssignmentViewSet,
+)
+
+router.register(r"academics/subjects", SubjectViewSet, base_name="academics-subjects")
+router.register(r"academics/course-editions", CourseEditionViewSet, base_name="academics-course-editions")
+router.register(r"academics/groups", CourseGroupViewSet, base_name="academics-groups")
+router.register(r"academics/teachers", TeacherProfileViewSet, base_name="academics-teachers")
+router.register(r"academics/project-links", GroupProjectLinkViewSet, base_name="academics-project-links")
+router.register(r"academics/coordinator-assignments", SubjectCoordinatorAssignmentViewSet, base_name="academics-coordinator-assignments")
+router.register(r"academics/professor-assignments", EditionProfessorAssignmentViewSet, base_name="academics-professor-assignments")
+router.register(r"academics/group-assignments", ProfessorGroupAssignmentViewSet, base_name="academics-group-assignments")
+
 # Webhooks
 from taiga.webhooks.api import WebhookViewSet
 from taiga.webhooks.api import WebhookLogViewSet

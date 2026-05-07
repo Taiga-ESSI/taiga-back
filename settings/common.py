@@ -405,6 +405,7 @@ INSTALLED_APPS = [
     "taiga.projects.contact",
     "taiga.projects.settings",
     "taiga.projects.metrics",
+    "taiga.academics",
     "taiga.searches",
     "taiga.timeline",
     "taiga.mdrender",
