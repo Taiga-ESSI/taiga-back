@@ -181,6 +181,7 @@ class SubjectPermission(TaigaResourcePermission):
     update_perms = IsAcademicAdmin()
     partial_update_perms = IsAcademicAdmin()
     destroy_perms = IsAcademicAdmin()
+    metrics_perms = IsActiveTeacher()
 
 
 class CourseEditionPermission(TaigaResourcePermission):

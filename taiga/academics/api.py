@@ -34,6 +34,17 @@ class SubjectViewSet(ModelCrudViewSet):
             qs = qs.filter(name__icontains=search) | qs.filter(code__icontains=search)
         return qs.distinct()
 
+    @detail_route(methods=["get"])
+    def metrics(self, request, pk=None):
+        subject = get_object_or_404(models.Subject, pk=pk)
+        self.check_permissions(request, "metrics", subject)
+
+        force = request.QUERY_PARAMS.get("refresh", "").lower() in ("1", "true", "yes")
+
+        from .services import get_subject_metrics
+        data = get_subject_metrics(subject, force=force)
+        return response.Ok(data)
+
 
 class CourseEditionViewSet(ModelCrudViewSet):
     permission_classes = (permissions.CourseEditionPermission,)
