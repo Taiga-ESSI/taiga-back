@@ -192,6 +192,8 @@ class CourseEditionPermission(TaigaResourcePermission):
     update_perms = IsAcademicAdmin() | IsEditionCoordinator()
     partial_update_perms = IsAcademicAdmin() | IsEditionCoordinator()
     destroy_perms = IsAcademicAdmin()
+    # Custom action: dashboard
+    dashboard_perms = IsActiveTeacher() | IsEditionReader()
     # Custom action: groups (list/create groups of an edition)
     groups_perms = IsAcademicAdmin() | IsEditionCoordinator()
 

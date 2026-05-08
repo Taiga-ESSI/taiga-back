@@ -54,6 +54,17 @@ class CourseEditionViewSet(ModelCrudViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    @detail_route(methods=["get"])
+    def dashboard(self, request, pk=None):
+        edition = get_object_or_404(models.CourseEdition, pk=pk)
+        self.check_permissions(request, "dashboard", edition)
+
+        force = request.QUERY_PARAMS.get("refresh", "").lower() in ("1", "true", "yes")
+
+        from .services import get_edition_dashboard
+        data = get_edition_dashboard(edition, force=force)
+        return response.Ok(data)
+
     @detail_route(methods=["get", "post"])
     def groups(self, request, pk=None):
         edition = get_object_or_404(models.CourseEdition, pk=pk)
