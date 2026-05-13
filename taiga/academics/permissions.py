@@ -146,8 +146,37 @@ class IsEditionReader(PermissionComponent):
 
 
 # ---------------------------------------------------------------------------
-# Helper
+# Helpers
 # ---------------------------------------------------------------------------
+
+def get_accessible_edition_ids(user):
+    """
+    Return a queryset of CourseEdition PKs the user may access as list/retrieve.
+    Admins and superusers are NOT handled here — callers must short-circuit first.
+    """
+    from .models import CourseEdition
+
+    try:
+        profile = user.teacher_profile
+        if not profile.is_active_teacher:
+            return CourseEdition.objects.none()
+    except Exception:
+        return CourseEdition.objects.none()
+
+    coordinated = CourseEdition.objects.filter(
+        subject__coordinator_assignments__teacher_profile=profile,
+        subject__coordinator_assignments__is_active=True,
+    )
+    as_professor = CourseEdition.objects.filter(
+        professor_assignments__teacher_profile=profile,
+        professor_assignments__is_active=True,
+    )
+    as_reader = CourseEdition.objects.filter(
+        dashboard_readers__user=user,
+        dashboard_readers__is_active=True,
+    )
+    return (coordinated | as_professor | as_reader).distinct()
+
 
 def _resolve_edition(obj, view, request):
     """Try to find the CourseEdition from the current context."""
@@ -194,7 +223,7 @@ class CourseEditionPermission(TaigaResourcePermission):
     partial_update_perms = IsAcademicAdmin() | IsEditionCoordinator()
     destroy_perms = IsAcademicAdmin()
     # Custom action: dashboard
-    dashboard_perms = IsActiveTeacher() | IsEditionReader()
+    dashboard_perms = IsAcademicAdmin() | IsEditionCoordinator() | IsEditionProfessor() | IsEditionReader()
     # Custom action: groups (list/create groups of an edition)
     groups_perms = IsAcademicAdmin() | IsEditionCoordinator()
 

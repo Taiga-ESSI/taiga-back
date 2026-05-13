@@ -16,11 +16,12 @@ def get_edition_dashboard(edition: CourseEdition, *, force: bool = False) -> Dic
     """
     Aggregate metrics for all active groups in a CourseEdition that have a
     linked Taiga project. Uses cached snapshots (TTL-based) unless force=True.
-    Applies CourseMetricsPolicy filtering and ordering if one exists.
+    Applies CourseMetricsPolicy filtering, ordering, and student drilldown rules.
     """
     groups_data = _collect_group_snapshots(edition, force=force)
     aggregated = _aggregate_metrics(groups_data)
     aggregated = _apply_policy(edition, groups_data, aggregated)
+    _apply_student_drilldown_policy(edition, groups_data)
 
     return {
         "course_edition_id": edition.pk,
@@ -201,6 +202,22 @@ def _apply_policy(edition: CourseEdition, groups_data: List[Dict], aggregated: D
         filtered = dict(sorted(filtered.items(), key=lambda kv: sort_key(kv[0])))
 
     return filtered
+
+
+def _apply_student_drilldown_policy(edition: CourseEdition, groups_data: List[Dict]) -> None:
+    """
+    If CourseMetricsPolicy.allow_student_drilldown is False, remove all
+    individual student data from the groups payload (GDPR compliance).
+    Modifies groups_data in place.
+    """
+    policy = _get_policy(edition)
+    if policy is not None and not policy.allow_student_drilldown:
+        for group in groups_data:
+            group["students"] = []
+            group["metrics"] = [
+                m for m in group.get("metrics", [])
+                if m.get("classification") != "team"
+            ]
 
 
 def _get_policy(edition: CourseEdition):

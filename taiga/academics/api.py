@@ -20,12 +20,31 @@ from . import permissions
 User = get_user_model()
 
 
+def _is_admin_user(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        return (
+            user.teacher_profile.is_active_teacher
+            and user.teacher_profile.global_role == "ACADEMIC_ADMIN"
+        )
+    except Exception:
+        return False
+
+
 class SubjectViewSet(ModelCrudViewSet):
     permission_classes = (permissions.SubjectPermission,)
     serializer_class = serializers.SubjectSerializer
 
     def get_queryset(self):
         qs = models.Subject.objects.all()
+
+        if not _is_admin_user(self.request.user):
+            accessible = permissions.get_accessible_edition_ids(self.request.user)
+            qs = qs.filter(editions__in=accessible).distinct()
+
         is_active = self.request.QUERY_PARAMS.get("is_active")
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == "true")
@@ -52,6 +71,11 @@ class CourseEditionViewSet(ModelCrudViewSet):
 
     def get_queryset(self):
         qs = models.CourseEdition.objects.select_related("subject").all()
+
+        if not _is_admin_user(self.request.user):
+            accessible = permissions.get_accessible_edition_ids(self.request.user)
+            qs = qs.filter(pk__in=accessible)
+
         if self.request.QUERY_PARAMS.get("subject_id"):
             qs = qs.filter(subject_id=self.request.QUERY_PARAMS["subject_id"])
         if self.request.QUERY_PARAMS.get("status"):
@@ -106,6 +130,11 @@ class CourseGroupViewSet(ModelCrudViewSet):
         qs = models.CourseGroup.objects.select_related(
             "course_edition", "project_link__project"
         ).all()
+
+        if not _is_admin_user(self.request.user):
+            accessible = permissions.get_accessible_edition_ids(self.request.user)
+            qs = qs.filter(course_edition__in=accessible)
+
         if self.request.QUERY_PARAMS.get("edition"):
             qs = qs.filter(course_edition_id=self.request.QUERY_PARAMS["edition"])
         if self.request.QUERY_PARAMS.get("is_active"):
