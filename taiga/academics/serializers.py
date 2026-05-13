@@ -166,3 +166,33 @@ class ProfessorGroupAssignmentSerializer(serializers.ModelSerializer):
             "is_active", "assigned_at",
         ]
         read_only_fields = ["id", "assigned_at"]
+
+
+class CourseMetricsPolicySerializer(serializers.ModelSerializer):
+    course_edition_id = serializers.IntegerField()
+    course_edition_key = serializers.CharField(source="course_edition.key", read_only=True)
+
+    class Meta:
+        model = models.CourseMetricsPolicy
+        fields = [
+            "id", "course_edition_id", "course_edition_key",
+            "visible_to_students_metric_ids", "hidden_metric_ids",
+            "group_metric_order", "project_metric_order",
+            "allow_student_drilldown", "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]
+
+
+class CourseDashboardReaderSerializer(serializers.ModelSerializer):
+    course_edition_id = serializers.IntegerField()
+    course_edition_key = serializers.CharField(source="course_edition.key", read_only=True)
+    user = UserSerializer(read_only=True)
+    user_id = serializers.IntegerField()
+
+    class Meta:
+        model = models.CourseDashboardReader
+        fields = [
+            "id", "course_edition_id", "course_edition_key",
+            "user", "user_id", "is_active", "granted_at",
+        ]
+        read_only_fields = ["id", "granted_at"]

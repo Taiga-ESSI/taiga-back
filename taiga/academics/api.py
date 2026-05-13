@@ -310,3 +310,45 @@ class ProfessorGroupAssignmentViewSet(ModelCrudViewSet):
 
     def perform_create(self, serializer):
         serializer.save(assigned_by=self.request.user)
+
+
+class CourseMetricsPolicyViewSet(ModelCrudViewSet):
+    permission_classes = (permissions.CourseMetricsPolicyPermission,)
+    serializer_class = serializers.CourseMetricsPolicySerializer
+
+    def get_queryset(self):
+        qs = models.CourseMetricsPolicy.objects.select_related("course_edition").all()
+
+        if not _is_admin_user(self.request.user):
+            accessible = permissions.get_accessible_edition_ids(self.request.user)
+            qs = qs.filter(course_edition__in=accessible)
+
+        if self.request.QUERY_PARAMS.get("course_edition_id"):
+            qs = qs.filter(course_edition_id=self.request.QUERY_PARAMS["course_edition_id"])
+        return qs
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+
+class CourseDashboardReaderViewSet(ModelCrudViewSet):
+    permission_classes = (permissions.CourseDashboardReaderPermission,)
+    serializer_class = serializers.CourseDashboardReaderSerializer
+
+    def get_queryset(self):
+        qs = models.CourseDashboardReader.objects.select_related(
+            "course_edition", "user"
+        ).all()
+
+        if not _is_admin_user(self.request.user):
+            accessible = permissions.get_accessible_edition_ids(self.request.user)
+            qs = qs.filter(course_edition__in=accessible)
+
+        if self.request.QUERY_PARAMS.get("course_edition_id"):
+            qs = qs.filter(course_edition_id=self.request.QUERY_PARAMS["course_edition_id"])
+        if self.request.QUERY_PARAMS.get("is_active"):
+            qs = qs.filter(is_active=self.request.QUERY_PARAMS["is_active"].lower() == "true")
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(granted_by=self.request.user)

@@ -296,3 +296,25 @@ class ProfessorGroupAssignmentPermission(TaigaResourcePermission):
     update_perms = IsAcademicAdmin() | IsEditionCoordinator()
     partial_update_perms = IsAcademicAdmin() | IsEditionCoordinator()
     destroy_perms = IsAcademicAdmin() | IsEditionCoordinator()
+
+
+class CourseMetricsPolicyPermission(TaigaResourcePermission):
+    enough_perms = IsAcademicAdmin() | IsSuperUser()
+    global_perms = None
+    list_perms = IsEditionCoordinator() | IsEditionProfessor()
+    retrieve_perms = IsEditionCoordinator() | IsEditionProfessor()
+    create_perms = IsAcademicAdmin() | IsEditionCoordinator()
+    update_perms = IsAcademicAdmin() | IsEditionCoordinator()
+    partial_update_perms = IsAcademicAdmin() | IsEditionCoordinator()
+    destroy_perms = IsAcademicAdmin()
+
+
+class CourseDashboardReaderPermission(TaigaResourcePermission):
+    enough_perms = IsAcademicAdmin() | IsSuperUser()
+    global_perms = None
+    list_perms = IsEditionCoordinator()
+    retrieve_perms = IsEditionCoordinator()
+    create_perms = IsAcademicAdmin() | IsEditionCoordinator()
+    update_perms = IsAcademicAdmin() | IsEditionCoordinator()
+    partial_update_perms = IsAcademicAdmin() | IsEditionCoordinator()
+    destroy_perms = IsAcademicAdmin() | IsEditionCoordinator()
