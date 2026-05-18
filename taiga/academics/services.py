@@ -12,16 +12,18 @@ from taiga.projects.metrics.internal import get_or_build_snapshot
 from .models import CourseEdition, Subject
 
 
-def get_edition_dashboard(edition: CourseEdition, *, force: bool = False) -> Dict:
+def get_edition_dashboard(edition: CourseEdition, *, force: bool = False, raw: bool = False) -> Dict:
     """
     Aggregate metrics for all active groups in a CourseEdition that have a
     linked Taiga project. Uses cached snapshots (TTL-based) unless force=True.
     Applies CourseMetricsPolicy filtering, ordering, and student drilldown rules.
+    Pass raw=True to skip policy filtering (used by the settings panel).
     """
     groups_data = _collect_group_snapshots(edition, force=force)
     aggregated = _aggregate_metrics(groups_data)
-    aggregated = _apply_policy(edition, groups_data, aggregated)
-    _apply_student_drilldown_policy(edition, groups_data)
+    if not raw:
+        aggregated = _apply_policy(edition, groups_data, aggregated)
+        _apply_student_drilldown_policy(edition, groups_data)
 
     return {
         "course_edition_id": edition.pk,

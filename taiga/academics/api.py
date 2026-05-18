@@ -95,9 +95,10 @@ class CourseEditionViewSet(ModelCrudViewSet):
         self.check_permissions(request, "dashboard", edition)
 
         force = request.QUERY_PARAMS.get("refresh", "").lower() in ("1", "true", "yes")
+        raw   = request.QUERY_PARAMS.get("raw", "").lower() in ("1", "true", "yes")
 
         from .services import get_edition_dashboard
-        data = get_edition_dashboard(edition, force=force)
+        data = get_edition_dashboard(edition, force=force, raw=raw)
         return response.Ok(data)
 
     @detail_route(methods=["get", "post"])
@@ -325,6 +326,10 @@ class CourseMetricsPolicyViewSet(ModelCrudViewSet):
 
         if self.request.QUERY_PARAMS.get("course_edition_id"):
             qs = qs.filter(course_edition_id=self.request.QUERY_PARAMS["course_edition_id"])
+        if self.request.QUERY_PARAMS.get("project_slug"):
+            qs = qs.filter(
+                course_edition__groups__project_link__project__slug=self.request.QUERY_PARAMS["project_slug"]
+            ).distinct()
         return qs
 
     def perform_update(self, serializer):
