@@ -210,10 +210,15 @@ def _apply_student_drilldown_policy(edition: CourseEdition, groups_data: List[Di
     """
     If CourseMetricsPolicy.allow_student_drilldown is False, remove all
     individual student data from the groups payload (GDPR compliance).
+    Adds drilldown_allowed flag to each group so the frontend can hide the
+    students section entirely rather than showing "no students found".
     Modifies groups_data in place.
     """
     policy = _get_policy(edition)
-    if policy is not None and not policy.allow_student_drilldown:
+    drilldown_allowed = policy is None or bool(policy.allow_student_drilldown)
+    for group in groups_data:
+        group["drilldown_allowed"] = drilldown_allowed
+    if not drilldown_allowed:
         for group in groups_data:
             group["students"] = []
             group["metrics"] = [

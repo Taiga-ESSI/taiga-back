@@ -53,6 +53,11 @@ class SubjectViewSet(ModelCrudViewSet):
             qs = qs.filter(name__icontains=search) | qs.filter(code__icontains=search)
         return qs.distinct()
 
+    @list_route(methods=["get"])
+    def instructor_check(self, request):
+        self.check_permissions(request, "instructor_check", None)
+        return response.Ok({"is_instructor": True})
+
     @detail_route(methods=["get"])
     def metrics(self, request, pk=None):
         subject = get_object_or_404(models.Subject, pk=pk)
@@ -98,7 +103,12 @@ class CourseEditionViewSet(ModelCrudViewSet):
         raw   = request.QUERY_PARAMS.get("raw", "").lower() in ("1", "true", "yes")
 
         from .services import get_edition_dashboard
+        from .permissions import IsEditionCoordinator
         data = get_edition_dashboard(edition, force=force, raw=raw)
+        data["can_edit_settings"] = (
+            _is_admin_user(request.user) or
+            IsEditionCoordinator().check_permissions(request, self, edition)
+        )
         return response.Ok(data)
 
     @detail_route(methods=["get", "post"])
