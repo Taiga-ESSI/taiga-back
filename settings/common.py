@@ -10,6 +10,7 @@ import os.path
 import sys
 from datetime import timedelta
 
+
 def env_to_bool(name, default=False):
     value = os.environ.get(name)
     if value is None:
@@ -65,6 +66,7 @@ CACHES = {
 # - Webhooks: https://c8b4589b5ff4.ngrok-free.app -> http://localhost:5000
 # - Learning Dashboard: https://eaa864cb69ae.ngrok-free.app -> http://localhost:8888
 LD_TAIGA_BACKEND_URL = os.environ.get("LD_TAIGA_BACKEND_URL", "https://eaa864cb69ae.ngrok-free.app")
+LD_API_KEY = os.environ.get("LD_API_KEY", "")
 try:
     LD_TAIGA_TIMEOUT = int(os.environ.get("LD_TAIGA_TIMEOUT", "15"))
 except (TypeError, ValueError):

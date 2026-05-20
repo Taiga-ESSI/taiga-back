@@ -26,6 +26,11 @@ DATABASES = {
 
 SECRET_KEY = "changeme"
 
+# Learning Dashboard metrics proxy.
+# Provide LD_API_KEY through the process environment in production.
+LD_TAIGA_BACKEND_URL = os.getenv("LD_TAIGA_BACKEND_URL", "https://eaa864cb69ae.ngrok-free.app")
+LD_API_KEY = os.getenv("LD_API_KEY", "")
+
 TAIGA_SITES_SCHEME = "https"
 TAIGA_SITES_DOMAIN = "example.com"
 FORCE_SCRIPT_NAME = ""

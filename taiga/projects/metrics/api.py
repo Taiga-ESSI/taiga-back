@@ -37,6 +37,8 @@ class MetricsViewSet(ReadOnlyListViewSet):
 
     permission_classes = (permissions.MetricsPermission,)
 
+    LD_API_KEY_HEADER = "X-LD-API-Key"
+    LD_API_KEY = getattr(settings, "LD_API_KEY", "")
     LD_TAIGA_BACKEND_URL = getattr(settings, "LD_TAIGA_BACKEND_URL", "http://gessi-dashboard.essi.upc.edu:8888")
     LD_TAIGA_TIMEOUT = getattr(settings, "LD_TAIGA_TIMEOUT", 15)
     SESSION_KEY = "ld_metrics_auth"
@@ -58,12 +60,16 @@ class MetricsViewSet(ReadOnlyListViewSet):
 
     def _request_backend(self, method, path, *, params=None):
         """Make request to gessi-dashboard API"""
+        if not self.LD_API_KEY:
+            raise RuntimeError("LD_API_KEY must be configured for Learning Dashboard API calls")
+
         url = self._build_backend_url(path)
         try:
             response_obj = requests.request(
                 method,
                 url,
                 params=params,
+                headers={self.LD_API_KEY_HEADER: self.LD_API_KEY},
                 timeout=self.LD_TAIGA_TIMEOUT
             )
             logger.info(f"gessi-dashboard {method.upper()} {url} -> {response_obj.status_code}")

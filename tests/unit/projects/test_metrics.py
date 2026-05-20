@@ -292,6 +292,7 @@ def test_metrics_api_force_internal(client, project):
 
 @override_settings(METRICS_PROVIDER="external")
 @patch.object(MetricsViewSet, "DEFAULT_PROVIDER", "external")
+@patch.object(MetricsViewSet, "LD_API_KEY", "test-ld-api-key")
 @patch("requests.request")
 def test_external_metrics_configuration(mock_request, client, project):
     # Ensure external provider is used (default)
@@ -315,4 +316,5 @@ def test_external_metrics_configuration(mock_request, client, project):
     # Verify mock called with correct URL
     args, kwargs = mock_request.call_args
     assert backend_url in args[1] # url is second arg or kwargs['url']
+    assert kwargs["headers"] == {"X-LD-API-Key": "test-ld-api-key"}
     # requests.request(method, url, ...)
