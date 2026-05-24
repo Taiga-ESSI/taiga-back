@@ -56,7 +56,11 @@ class SubjectViewSet(ModelCrudViewSet):
     @list_route(methods=["get"])
     def instructor_check(self, request):
         self.check_permissions(request, "instructor_check", None)
-        return response.Ok({"is_instructor": True})
+        from .permissions import get_accessible_edition_ids
+        accessible = get_accessible_edition_ids(request.user)
+        ids = list(accessible.values_list("pk", flat=True))
+        single_edition_id = ids[0] if len(ids) == 1 else None
+        return response.Ok({"is_instructor": True, "single_edition_id": single_edition_id})
 
     @detail_route(methods=["get"])
     def metrics(self, request, pk=None):
@@ -101,10 +105,11 @@ class CourseEditionViewSet(ModelCrudViewSet):
 
         force = request.QUERY_PARAMS.get("refresh", "").lower() in ("1", "true", "yes")
         raw   = request.QUERY_PARAMS.get("raw", "").lower() in ("1", "true", "yes")
+        professor_view = request.QUERY_PARAMS.get("professor_view", "").lower() in ("1", "true", "yes")
 
         from .services import get_edition_dashboard
         from .permissions import IsEditionCoordinator
-        data = get_edition_dashboard(edition, force=force, raw=raw)
+        data = get_edition_dashboard(edition, force=force, raw=raw, requesting_user=request.user, professor_view=professor_view)
         data["can_edit_settings"] = (
             _is_admin_user(request.user) or
             IsEditionCoordinator().check_permissions(request, self, edition)
@@ -112,33 +117,33 @@ class CourseEditionViewSet(ModelCrudViewSet):
         return response.Ok(data)
 
     @detail_route(methods=["get", "post"])
-    def groups(self, request, pk=None):
+    def teams(self, request, pk=None):
         edition = get_object_or_404(models.CourseEdition, pk=pk)
-        self.check_permissions(request, "groups", edition)
+        self.check_permissions(request, "teams", edition)
 
         if request.method == "GET":
-            qs = edition.groups.all()
+            qs = edition.teams.all()
             if request.QUERY_PARAMS.get("is_active"):
                 qs = qs.filter(is_active=request.QUERY_PARAMS["is_active"].lower() == "true")
-            serializer = serializers.CourseGroupSerializer(qs, many=True)
+            serializer = serializers.CourseTeamSerializer(qs, many=True)
             return response.Ok(serializer.data)
 
-        # POST — create a new group in this edition
+        # POST — create a new team in this edition
         data = request.DATA.copy()
         data["course_edition_id"] = edition.pk
-        serializer = serializers.CourseGroupSerializer(data=data)
+        serializer = serializers.CourseTeamSerializer(data=data)
         if serializer.is_valid():
             serializer.save(course_edition=edition, created_by=request.user)
             return response.Created(serializer.data)
         return response.BadRequest(serializer.errors)
 
 
-class CourseGroupViewSet(ModelCrudViewSet):
-    permission_classes = (permissions.CourseGroupPermission,)
-    serializer_class = serializers.CourseGroupSerializer
+class CourseTeamViewSet(ModelCrudViewSet):
+    permission_classes = (permissions.CourseTeamPermission,)
+    serializer_class = serializers.CourseTeamSerializer
 
     def get_queryset(self):
-        qs = models.CourseGroup.objects.select_related(
+        qs = models.CourseTeam.objects.select_related(
             "course_edition", "project_link__project"
         ).all()
 
@@ -157,29 +162,29 @@ class CourseGroupViewSet(ModelCrudViewSet):
 
     @detail_route(methods=["get", "post", "patch", "delete"])
     def project_link(self, request, pk=None):
-        group = get_object_or_404(models.CourseGroup, pk=pk)
+        team = get_object_or_404(models.CourseTeam, pk=pk)
 
         if request.method == "GET":
-            self.check_permissions(request, "project_link", group)
-            link = getattr(group, "project_link", None)
+            self.check_permissions(request, "project_link", team)
+            link = getattr(team, "project_link", None)
             if link is None:
                 return response.NotFound()
-            return response.Ok(serializers.GroupProjectLinkSerializer(link).data)
+            return response.Ok(serializers.TeamProjectLinkSerializer(link).data)
 
         if request.method == "POST":
-            self.check_permissions(request, "project_link_update", group)
-            if hasattr(group, "project_link"):
-                return response.BadRequest({"error": "ACADEMICS.GROUP_ALREADY_HAS_PROJECT_LINK"})
-            serializer = serializers.GroupProjectLinkSerializer(data=request.DATA)
+            self.check_permissions(request, "project_link_update", team)
+            if hasattr(team, "project_link"):
+                return response.BadRequest({"error": "ACADEMICS.TEAM_ALREADY_HAS_PROJECT_LINK"})
+            serializer = serializers.TeamProjectLinkSerializer(data=request.DATA)
             if serializer.is_valid():
-                serializer.save(course_group=group, linked_by=request.user)
+                serializer.save(course_team=team, linked_by=request.user)
                 return response.Created(serializer.data)
             return response.BadRequest(serializer.errors)
 
         if request.method == "PATCH":
-            self.check_permissions(request, "project_link_update", group)
-            link = get_object_or_404(models.GroupProjectLink, course_group=group)
-            serializer = serializers.GroupProjectLinkSerializer(
+            self.check_permissions(request, "project_link_update", team)
+            link = get_object_or_404(models.TeamProjectLink, course_team=team)
+            serializer = serializers.TeamProjectLinkSerializer(
                 link, data=request.DATA, partial=True
             )
             if serializer.is_valid():
@@ -188,8 +193,8 @@ class CourseGroupViewSet(ModelCrudViewSet):
             return response.BadRequest(serializer.errors)
 
         if request.method == "DELETE":
-            self.check_permissions(request, "project_link_update", group)
-            link = get_object_or_404(models.GroupProjectLink, course_group=group)
+            self.check_permissions(request, "project_link_update", team)
+            link = get_object_or_404(models.TeamProjectLink, course_team=team)
             link.delete()
             return response.NoContent()
 
@@ -219,16 +224,16 @@ class TeacherProfileViewSet(ModelCrudViewSet):
         serializer.save(user=user)
 
 
-class GroupProjectLinkViewSet(ModelCrudViewSet):
-    permission_classes = (permissions.GroupProjectLinkPermission,)
-    serializer_class = serializers.GroupProjectLinkSerializer
+class TeamProjectLinkViewSet(ModelCrudViewSet):
+    permission_classes = (permissions.TeamProjectLinkPermission,)
+    serializer_class = serializers.TeamProjectLinkSerializer
 
     def get_queryset(self):
-        qs = models.GroupProjectLink.objects.select_related(
-            "course_group", "project"
+        qs = models.TeamProjectLink.objects.select_related(
+            "course_team", "project"
         ).all()
-        if self.request.QUERY_PARAMS.get("group"):
-            qs = qs.filter(course_group_id=self.request.QUERY_PARAMS["group"])
+        if self.request.QUERY_PARAMS.get("team"):
+            qs = qs.filter(course_team_id=self.request.QUERY_PARAMS["team"])
         return qs
 
     @list_route(methods=["post"])
@@ -299,22 +304,22 @@ class EditionProfessorAssignmentViewSet(ModelCrudViewSet):
         serializer.save(created_by=self.request.user)
 
 
-class ProfessorGroupAssignmentViewSet(ModelCrudViewSet):
-    permission_classes = (permissions.ProfessorGroupAssignmentPermission,)
-    serializer_class = serializers.ProfessorGroupAssignmentSerializer
+class ProfessorTeamAssignmentViewSet(ModelCrudViewSet):
+    permission_classes = (permissions.ProfessorTeamAssignmentPermission,)
+    serializer_class = serializers.ProfessorTeamAssignmentSerializer
 
     def get_queryset(self):
-        qs = models.ProfessorGroupAssignment.objects.select_related(
+        qs = models.ProfessorTeamAssignment.objects.select_related(
             "edition_professor_assignment__teacher_profile__user",
             "edition_professor_assignment__course_edition",
-            "course_group",
+            "course_team",
         ).all()
         if self.request.QUERY_PARAMS.get("edition_professor_assignment_id"):
             qs = qs.filter(
                 edition_professor_assignment_id=self.request.QUERY_PARAMS["edition_professor_assignment_id"]
             )
-        if self.request.QUERY_PARAMS.get("course_group_id"):
-            qs = qs.filter(course_group_id=self.request.QUERY_PARAMS["course_group_id"])
+        if self.request.QUERY_PARAMS.get("course_team_id"):
+            qs = qs.filter(course_team_id=self.request.QUERY_PARAMS["course_team_id"])
         if self.request.QUERY_PARAMS.get("is_active"):
             qs = qs.filter(is_active=self.request.QUERY_PARAMS["is_active"].lower() == "true")
         return qs
@@ -338,7 +343,7 @@ class CourseMetricsPolicyViewSet(ModelCrudViewSet):
             qs = qs.filter(course_edition_id=self.request.QUERY_PARAMS["course_edition_id"])
         if self.request.QUERY_PARAMS.get("project_slug"):
             qs = qs.filter(
-                course_edition__groups__project_link__project__slug=self.request.QUERY_PARAMS["project_slug"]
+                course_edition__teams__project_link__project__slug=self.request.QUERY_PARAMS["project_slug"]
             ).distinct()
         return qs
 

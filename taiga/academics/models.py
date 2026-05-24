@@ -21,6 +21,8 @@ class Subject(models.Model):
 
     class Meta:
         ordering = ["code"]
+        verbose_name = "Subject"
+        verbose_name_plural = "Subjects"
 
     def __str__(self):
         return self.code
@@ -77,6 +79,8 @@ class CourseEdition(models.Model):
 
     class Meta:
         ordering = ["-academic_year", "term", "key"]
+        verbose_name = "Course Edition"
+        verbose_name_plural = "Course Editions"
 
     def __str__(self):
         return self.key
@@ -85,13 +89,13 @@ class CourseEdition(models.Model):
         return new_status in self.VALID_TRANSITIONS.get(self.status, [])
 
 
-class CourseGroup(models.Model):
+class CourseTeam(models.Model):
     course_edition = models.ForeignKey(
         CourseEdition,
-        related_name="groups",
+        related_name="teams",
         on_delete=models.CASCADE,
     )
-    group_code = models.CharField(max_length=20)
+    team_code = models.CharField(max_length=20)
     display_name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -100,15 +104,17 @@ class CourseGroup(models.Model):
         settings.AUTH_USER_MODEL,
         null=True, blank=True,
         on_delete=models.SET_NULL,
-        related_name="created_groups",
+        related_name="created_teams",
     )
 
     class Meta:
-        ordering = ["group_code"]
-        unique_together = [["course_edition", "group_code"]]
+        ordering = ["team_code"]
+        unique_together = [["course_edition", "team_code"]]
+        verbose_name = "Team"
+        verbose_name_plural = "Teams"
 
     def __str__(self):
-        return f"{self.course_edition.key} / {self.group_code}"
+        return f"{self.course_edition.key} / {self.team_code}"
 
 
 class TeacherProfile(models.Model):
@@ -132,6 +138,8 @@ class TeacherProfile(models.Model):
 
     class Meta:
         ordering = ["user__username"]
+        verbose_name = "Teacher Profile"
+        verbose_name_plural = "Teacher Profiles"
 
     def __str__(self):
         return f"{self.user.username} ({self.global_role})"
@@ -176,6 +184,8 @@ class SubjectCoordinatorAssignment(models.Model):
     class Meta:
         ordering = ["subject", "teacher_profile"]
         unique_together = [["subject", "teacher_profile"]]
+        verbose_name = "Subject Coordinator Assignment"
+        verbose_name_plural = "Subject Coordinator Assignments"
 
     def __str__(self):
         return f"{self.teacher_profile.user.username} → {self.subject.code}"
@@ -207,19 +217,21 @@ class EditionProfessorAssignment(models.Model):
     class Meta:
         ordering = ["course_edition", "teacher_profile"]
         unique_together = [["course_edition", "teacher_profile"]]
+        verbose_name = "Edition Professor Assignment"
+        verbose_name_plural = "Edition Professor Assignments"
 
     def __str__(self):
         return f"{self.teacher_profile.user.username} → {self.course_edition.key}"
 
 
-class ProfessorGroupAssignment(models.Model):
+class ProfessorTeamAssignment(models.Model):
     edition_professor_assignment = models.ForeignKey(
         EditionProfessorAssignment,
-        related_name="group_assignments",
+        related_name="team_assignments",
         on_delete=models.CASCADE,
     )
-    course_group = models.ForeignKey(
-        CourseGroup,
+    course_team = models.ForeignKey(
+        CourseTeam,
         related_name="professor_assignments",
         on_delete=models.CASCADE,
     )
@@ -229,26 +241,28 @@ class ProfessorGroupAssignment(models.Model):
         settings.AUTH_USER_MODEL,
         null=True, blank=True,
         on_delete=models.SET_NULL,
-        related_name="created_group_assignments",
+        related_name="created_team_assignments",
     )
 
     class Meta:
-        ordering = ["edition_professor_assignment", "course_group"]
-        unique_together = [["edition_professor_assignment", "course_group"]]
+        ordering = ["edition_professor_assignment", "course_team"]
+        unique_together = [["edition_professor_assignment", "course_team"]]
+        verbose_name = "Professor Team Assignment"
+        verbose_name_plural = "Professor Team Assignments"
 
     def __str__(self):
-        return f"{self.edition_professor_assignment} / {self.course_group.group_code}"
+        return f"{self.edition_professor_assignment} / {self.course_team.team_code}"
 
 
-class GroupProjectLink(models.Model):
-    course_group = models.OneToOneField(
-        CourseGroup,
+class TeamProjectLink(models.Model):
+    course_team = models.OneToOneField(
+        CourseTeam,
         related_name="project_link",
         on_delete=models.CASCADE,
     )
     project = models.ForeignKey(
         "projects.Project",
-        related_name="academic_group_links",
+        related_name="academic_team_links",
         on_delete=models.CASCADE,
     )
     source_url = models.URLField(blank=True, default="")
@@ -262,10 +276,12 @@ class GroupProjectLink(models.Model):
     )
 
     class Meta:
-        ordering = ["course_group"]
+        ordering = ["course_team"]
+        verbose_name = "Team Project Link"
+        verbose_name_plural = "Team Project Links"
 
     def __str__(self):
-        return f"{self.course_group} → {self.project.slug}"
+        return f"{self.course_team} → {self.project.slug}"
 
 
 class CourseMetricsPolicy(models.Model):
@@ -276,7 +292,7 @@ class CourseMetricsPolicy(models.Model):
     )
     visible_to_students_metric_ids = JSONField(default=list, blank=True)
     hidden_metric_ids = JSONField(default=list, blank=True)
-    group_metric_order = JSONField(default=list, blank=True)
+    team_metric_order = JSONField(default=list, blank=True)
     project_metric_order = JSONField(default=list, blank=True)
     allow_student_drilldown = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -289,6 +305,8 @@ class CourseMetricsPolicy(models.Model):
 
     class Meta:
         ordering = ["course_edition"]
+        verbose_name = "Course Metrics Policy"
+        verbose_name_plural = "Course Metrics Policies"
 
     def __str__(self):
         return f"{self.course_edition.key} metrics policy"
@@ -317,6 +335,8 @@ class CourseDashboardReader(models.Model):
     class Meta:
         ordering = ["course_edition", "user"]
         unique_together = [["course_edition", "user"]]
+        verbose_name = "Course Dashboard Reader"
+        verbose_name_plural = "Course Dashboard Readers"
 
     def __str__(self):
         return f"{self.user.username} → {self.course_edition.key}"

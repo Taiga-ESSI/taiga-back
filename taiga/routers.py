@@ -263,24 +263,24 @@ router.register(r"metrics", MetricsViewSet, base_name="metrics")
 from taiga.academics.api import (
     SubjectViewSet,
     CourseEditionViewSet,
-    CourseGroupViewSet,
+    CourseTeamViewSet,
     TeacherProfileViewSet,
-    GroupProjectLinkViewSet,
+    TeamProjectLinkViewSet,
     SubjectCoordinatorAssignmentViewSet,
     EditionProfessorAssignmentViewSet,
-    ProfessorGroupAssignmentViewSet,
+    ProfessorTeamAssignmentViewSet,
     CourseMetricsPolicyViewSet,
     CourseDashboardReaderViewSet,
 )
 
 router.register(r"academics/subjects", SubjectViewSet, base_name="academics-subjects")
 router.register(r"academics/course-editions", CourseEditionViewSet, base_name="academics-course-editions")
-router.register(r"academics/groups", CourseGroupViewSet, base_name="academics-groups")
+router.register(r"academics/teams", CourseTeamViewSet, base_name="academics-teams")
 router.register(r"academics/teachers", TeacherProfileViewSet, base_name="academics-teachers")
-router.register(r"academics/project-links", GroupProjectLinkViewSet, base_name="academics-project-links")
+router.register(r"academics/project-links", TeamProjectLinkViewSet, base_name="academics-project-links")
 router.register(r"academics/coordinator-assignments", SubjectCoordinatorAssignmentViewSet, base_name="academics-coordinator-assignments")
 router.register(r"academics/professor-assignments", EditionProfessorAssignmentViewSet, base_name="academics-professor-assignments")
-router.register(r"academics/group-assignments", ProfessorGroupAssignmentViewSet, base_name="academics-group-assignments")
+router.register(r"academics/team-assignments", ProfessorTeamAssignmentViewSet, base_name="academics-team-assignments")
 router.register(r"academics/metrics-policies", CourseMetricsPolicyViewSet, base_name="academics-metrics-policies")
 router.register(r"academics/dashboard-readers", CourseDashboardReaderViewSet, base_name="academics-dashboard-readers")
 

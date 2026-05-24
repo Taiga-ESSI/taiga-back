@@ -180,15 +180,15 @@ def get_accessible_edition_ids(user):
 
 def _resolve_edition(obj, view, request):
     """Try to find the CourseEdition from the current context."""
-    from .models import CourseEdition, CourseGroup
+    from .models import CourseEdition, CourseTeam
 
     if obj is not None:
         if isinstance(obj, CourseEdition):
             return obj
         if hasattr(obj, "course_edition"):
             return obj.course_edition
-        if hasattr(obj, "course_group") and hasattr(obj.course_group, "course_edition"):
-            return obj.course_group.course_edition
+        if hasattr(obj, "course_team") and hasattr(obj.course_team, "course_edition"):
+            return obj.course_team.course_edition
 
     edition_id = view.kwargs.get("edition_id") or request.QUERY_PARAMS.get("edition_id")
     if edition_id:
@@ -225,11 +225,11 @@ class CourseEditionPermission(TaigaResourcePermission):
     destroy_perms = IsAcademicAdmin()
     # Custom action: dashboard
     dashboard_perms = IsAcademicAdmin() | IsEditionCoordinator() | IsEditionProfessor() | IsEditionReader()
-    # Custom action: groups (list/create groups of an edition)
-    groups_perms = IsAcademicAdmin() | IsEditionCoordinator()
+    # Custom action: teams (list/create teams of an edition)
+    teams_perms = IsAcademicAdmin() | IsEditionCoordinator()
 
 
-class CourseGroupPermission(TaigaResourcePermission):
+class CourseTeamPermission(TaigaResourcePermission):
     enough_perms = IsAcademicAdmin() | IsSuperUser()
     global_perms = None
     list_perms = IsActiveTeacher()
@@ -254,7 +254,7 @@ class TeacherProfilePermission(TaigaResourcePermission):
     destroy_perms = IsAcademicAdmin()
 
 
-class GroupProjectLinkPermission(TaigaResourcePermission):
+class TeamProjectLinkPermission(TaigaResourcePermission):
     enough_perms = IsAcademicAdmin() | IsSuperUser()
     global_perms = None
     list_perms = IsActiveTeacher()
@@ -288,7 +288,7 @@ class EditionProfessorAssignmentPermission(TaigaResourcePermission):
     destroy_perms = IsAcademicAdmin() | IsEditionCoordinator()
 
 
-class ProfessorGroupAssignmentPermission(TaigaResourcePermission):
+class ProfessorTeamAssignmentPermission(TaigaResourcePermission):
     enough_perms = IsAcademicAdmin() | IsSuperUser()
     global_perms = None
     list_perms = IsActiveTeacher()

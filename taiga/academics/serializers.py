@@ -24,11 +24,11 @@ class CourseEditionSerializer(serializers.ModelSerializer):
         source="subject",
         write_only=True,
     )
-    group_count = serializers.SerializerMethodField("get_group_count")
+    team_count = serializers.SerializerMethodField("get_team_count")
     professor_count = serializers.SerializerMethodField("get_professor_count")
 
-    def get_group_count(self, obj):
-        return obj.groups.filter(is_active=True).count()
+    def get_team_count(self, obj):
+        return obj.teams.filter(is_active=True).count()
 
     def get_professor_count(self, obj):
         professors = obj.professor_assignments.filter(is_active=True).count()
@@ -55,48 +55,48 @@ class CourseEditionSerializer(serializers.ModelSerializer):
         model = models.CourseEdition
         fields = [
             "id", "subject", "subject_id", "key", "academic_year", "term",
-            "start_date", "end_date", "status", "group_count", "professor_count",
+            "start_date", "end_date", "status", "team_count", "professor_count",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
-class GroupProjectLinkSerializer(serializers.ModelSerializer):
+class TeamProjectLinkSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source="project.name", read_only=True)
     project_slug = serializers.CharField(source="project.slug", read_only=True)
-    course_group_id = serializers.IntegerField(read_only=True)
+    course_team_id = serializers.IntegerField(read_only=True)
     project_id = serializers.IntegerField()
 
     class Meta:
-        model = models.GroupProjectLink
+        model = models.TeamProjectLink
         fields = [
-            "id", "course_group_id", "project_id", "project_name", "project_slug",
+            "id", "course_team_id", "project_id", "project_name", "project_slug",
             "source_url", "is_active", "linked_at",
         ]
         read_only_fields = ["id", "linked_at"]
 
 
-class CourseGroupSerializer(serializers.ModelSerializer):
+class CourseTeamSerializer(serializers.ModelSerializer):
     course_edition_id = serializers.PrimaryKeyRelatedField(
         queryset=models.CourseEdition.objects.all(),
         source="course_edition",
         write_only=True,
     )
     course_edition_key = serializers.CharField(source="course_edition.key", read_only=True)
-    project_link = GroupProjectLinkSerializer(read_only=True)
+    project_link = TeamProjectLinkSerializer(read_only=True)
 
     class Meta:
-        model = models.CourseGroup
+        model = models.CourseTeam
         fields = [
-            "id", "course_edition_id", "course_edition_key", "group_code",
+            "id", "course_edition_id", "course_edition_key", "team_code",
             "display_name", "is_active", "project_link", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
-    def validate_group_code(self, value):
-        # group_code is immutable after creation
+    def validate_team_code(self, value):
+        # team_code is immutable after creation
         if self.instance:
-            return self.instance.group_code
+            return self.instance.team_code
         return value
 
 
@@ -156,15 +156,15 @@ class EditionProfessorAssignmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
-class ProfessorGroupAssignmentSerializer(serializers.ModelSerializer):
+class ProfessorTeamAssignmentSerializer(serializers.ModelSerializer):
     edition_professor_assignment_id = serializers.IntegerField()
-    course_group_id = serializers.IntegerField()
-    course_group_code = serializers.CharField(source="course_group.group_code", read_only=True)
+    course_team_id = serializers.IntegerField()
+    course_team_code = serializers.CharField(source="course_team.team_code", read_only=True)
 
     class Meta:
-        model = models.ProfessorGroupAssignment
+        model = models.ProfessorTeamAssignment
         fields = [
-            "id", "edition_professor_assignment_id", "course_group_id", "course_group_code",
+            "id", "edition_professor_assignment_id", "course_team_id", "course_team_code",
             "is_active", "assigned_at",
         ]
         read_only_fields = ["id", "assigned_at"]
@@ -179,7 +179,7 @@ class CourseMetricsPolicySerializer(serializers.ModelSerializer):
         fields = [
             "id", "course_edition_id", "course_edition_key",
             "visible_to_students_metric_ids", "hidden_metric_ids",
-            "group_metric_order", "project_metric_order",
+            "team_metric_order", "project_metric_order",
             "allow_student_drilldown", "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
