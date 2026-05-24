@@ -31,9 +31,15 @@ class CourseEditionSerializer(serializers.ModelSerializer):
         return obj.teams.filter(is_active=True).count()
 
     def get_professor_count(self, obj):
-        professors = obj.professor_assignments.filter(is_active=True).count()
-        coordinators = obj.subject.coordinator_assignments.filter(is_active=True).count()
-        return professors + coordinators
+        prof_user_ids = set(
+            obj.professor_assignments.filter(is_active=True)
+            .values_list("teacher_profile__user_id", flat=True)
+        )
+        coord_user_ids = set(
+            obj.subject.coordinator_assignments.filter(is_active=True)
+            .values_list("teacher_profile__user_id", flat=True)
+        )
+        return len(prof_user_ids | coord_user_ids)
 
     def validate(self, data):
         if data.get("start_date") and data.get("end_date"):
