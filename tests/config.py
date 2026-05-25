@@ -17,6 +17,7 @@ SECRET_KEY = "not very secret in tests"
 TEMPLATES[0]["OPTIONS"]['context_processors'] += "django.template.context_processors.debug"
 
 CELERY_ENABLED = False
+LD_API_KEY = os.getenv("LD_API_KEY", "test-ld-api-key")
 
 MEDIA_ROOT = "/tmp"
 
