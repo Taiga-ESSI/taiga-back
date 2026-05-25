@@ -5,11 +5,18 @@
 #
 # Copyright (c) 2021-present Kaleidos INC
 
+import logging
+from datetime import datetime, timezone as dt_timezone
 from typing import Dict, List, Optional, Tuple
+
+import requests
+from django.conf import settings
 
 from taiga.projects.metrics.internal import get_or_build_snapshot
 
 from .models import CourseEdition, Subject
+
+logger = logging.getLogger(__name__)
 
 
 def get_edition_dashboard(edition: CourseEdition, *, force: bool = False, raw: bool = False, requesting_user=None, professor_view: bool = False) -> Dict:
@@ -170,6 +177,167 @@ def _get_visible_team_ids(edition: CourseEdition, user, professor_view: bool = F
     return assigned_ids if assigned_ids else None
 
 
+# Display names for known LD individual metric base IDs (used in settings panel)
+_LD_BASE_METRIC_DISPLAY: Dict[str, str] = {
+    "assignedtasks": "Tasks",
+    "closedtasks": "Closed tasks",
+    "commits": "Commits",
+    "modifiedlines": "Modified lines",
+}
+
+# Suffixes to strip from LD individual metric names to extract the person name.
+# Order matters: longer suffixes must come first.
+_LD_INDIVIDUAL_NAME_SUFFIXES = [
+    " closed tasks",
+    " modified lines",
+    " tasks",
+    " commits",
+]
+
+
+def _ld_extract_person_name(metric_name: str) -> str:
+    """Strip the metric type suffix from a LD individual metric name to get the person name."""
+    lower = metric_name.lower()
+    for suffix in _LD_INDIVIDUAL_NAME_SUFFIXES:
+        if lower.endswith(suffix):
+            return metric_name[: len(metric_name) - len(suffix)].strip()
+    return metric_name
+
+
+def _fetch_ld_payload(external_project_id: str) -> Tuple[Dict, str]:
+    """
+    Fetch current metrics from Learning Dashboard for the given project externalId.
+    Returns (payload_dict, computed_at_iso) in the same format as an internal snapshot.
+    On any network or parsing error, returns an empty payload so the team still appears.
+    """
+    base_url = getattr(settings, "LD_TAIGA_BACKEND_URL", "https://gessi-dashboard.essi.upc.edu").rstrip("/")
+    timeout = getattr(settings, "LD_TAIGA_TIMEOUT", 15)
+    computed_at = datetime.now(dt_timezone.utc).isoformat()
+
+    try:
+        resp = requests.get(
+            f"{base_url}/api/metrics/current",
+            params={"prj": external_project_id},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        ld_list = resp.json()
+    except Exception as exc:
+        logger.warning("LD metrics fetch failed for %s: %s", external_project_id, exc)
+        return {"metrics": [], "students": [], "metrics_categories": [], "is_new_project": True}, computed_at
+
+    if not isinstance(ld_list, list):
+        return {"metrics": [], "students": [], "metrics_categories": [], "is_new_project": True}, computed_at
+
+    try:
+        cat_resp = requests.get(
+            f"{base_url}/api/metrics/categories",
+            params={"prj": external_project_id},
+            timeout=timeout,
+        )
+        cat_resp.raise_for_status()
+        _cat_data = cat_resp.json()
+        metrics_categories = _cat_data if isinstance(_cat_data, list) else []
+    except Exception:
+        metrics_categories = []
+
+    # Fetch the metrics catalog to get categoryName per metric (same as the student metrics view).
+    # This map lets the frontend look up the right color palette for each metric.
+    category_name_map: Dict[str, str] = {}
+    try:
+        catalog_resp = requests.get(
+            f"{base_url}/api/metrics",
+            params={"prj": external_project_id},
+            timeout=timeout,
+        )
+        catalog_resp.raise_for_status()
+        _catalog_data = catalog_resp.json()
+        catalog_entries = _catalog_data if isinstance(_catalog_data, list) else (
+            _catalog_data.get("results", []) if isinstance(_catalog_data, dict) else []
+        )
+        for entry in catalog_entries:
+            if not isinstance(entry, dict):
+                continue
+            ext_id = entry.get("externalId") or entry.get("id")
+            cat_name = entry.get("categoryName") or entry.get("category")
+            if ext_id and cat_name:
+                category_name_map[str(ext_id).strip().lower()] = cat_name
+    except Exception:
+        pass
+
+    metrics = []
+    # Keyed by person display name to group metrics across different username formats
+    students_dict: Dict[str, Dict] = {}
+
+    for m in ld_list:
+        if not isinstance(m, dict) or not m.get("id"):
+            continue
+
+        scope = m.get("scope", "team")
+        metric_id = m["id"]
+        ld_name = m.get("name", metric_id)
+        value = float(m.get("value") or 0)
+        value_description = m.get("value_description", "")
+        description = m.get("description", "")
+        quality_factors = m.get("qualityFactors", [])
+
+        if scope == "individual":
+            # Derive base metric id and display name for settings deduplication
+            base_id = metric_id.split("_", 1)[0]
+            username = metric_id.split("_", 1)[1] if "_" in metric_id else metric_id
+            base_display = _LD_BASE_METRIC_DISPLAY.get(base_id, base_id.capitalize())
+
+            # Format name with · so the settings panel regex strips the username suffix
+            metric_name = f"{base_display} · {username}"
+
+            # Group by person display name (consistent across different username formats)
+            person_name = _ld_extract_person_name(ld_name)
+            if person_name not in students_dict:
+                students_dict[person_name] = {
+                    "username": username,
+                    "name": person_name,
+                    "displayName": person_name,
+                    "identities": {},
+                    "metrics": [],
+                }
+            cat_name = category_name_map.get(metric_id.lower())
+            students_dict[person_name]["metrics"].append({
+                "id": metric_id,
+                "name": ld_name,
+                "base_name": base_display,
+                "value": value,
+                "value_description": value_description,
+                "description": description,
+                "qualityFactors": quality_factors,
+                "classification": "team",
+                "scope": scope,
+                "student": username,
+                **( {"categoryName": cat_name} if cat_name else {} ),
+            })
+        else:
+            metric_name = ld_name
+
+        cat_name = category_name_map.get(metric_id.lower())
+        metrics.append({
+            "id": metric_id,
+            "name": metric_name,
+            "value": value,
+            "value_description": value_description,
+            "description": description,
+            "qualityFactors": quality_factors,
+            "classification": "team" if scope == "individual" else "project",
+            "scope": scope,
+            **( {"categoryName": cat_name} if cat_name else {} ),
+        })
+
+    return {
+        "metrics": metrics,
+        "students": list(students_dict.values()),
+        "metrics_categories": metrics_categories,
+        "is_new_project": len(metrics) == 0,
+    }, computed_at
+
+
 def _collect_team_snapshots(edition: CourseEdition, *, force: bool, visible_team_ids: Optional[set] = None) -> List[Dict]:
     teams = (
         edition.teams
@@ -187,8 +355,19 @@ def _collect_team_snapshots(edition: CourseEdition, *, force: bool, visible_team
             continue
 
         project = link.project
-        snapshot = get_or_build_snapshot(project, use_cache=not force, force=force)
-        payload = snapshot.payload or {}
+
+        try:
+            config = project.metrics_config
+            use_external = config.provider == "external" and bool(config.external_project_id)
+        except Exception:
+            use_external = False
+
+        if use_external:
+            payload, computed_at = _fetch_ld_payload(config.external_project_id)
+        else:
+            snapshot = get_or_build_snapshot(project, use_cache=not force, force=force)
+            payload = snapshot.payload or {}
+            computed_at = snapshot.computed_at.isoformat()
 
         result.append({
             "group_id": team.pk,
@@ -197,9 +376,11 @@ def _collect_team_snapshots(edition: CourseEdition, *, force: bool, visible_team
             "project_id": project.pk,
             "project_slug": project.slug,
             "project_name": project.name,
-            "snapshot_computed_at": snapshot.computed_at.isoformat(),
+            "snapshot_computed_at": computed_at,
+            "metrics_provider": "external" if use_external else "internal",
             "metrics": payload.get("metrics", []),
             "students": payload.get("students", []),
+            "metrics_categories": payload.get("metrics_categories", []),
             "is_new_project": payload.get("is_new_project", True),
         })
 

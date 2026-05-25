@@ -83,6 +83,14 @@ try:
 except (TypeError, ValueError):
     METRICS_INTERNAL_SNAPSHOT_TTL_MINUTES = 60
 
+LD_TAIGA_BACKEND_URL = os.environ.get(
+    "LD_TAIGA_BACKEND_URL", "https://gessi-dashboard.essi.upc.edu"
+).rstrip("/")
+try:
+    LD_TAIGA_TIMEOUT = int(os.environ.get("LD_TAIGA_TIMEOUT", "15"))
+except (TypeError, ValueError):
+    LD_TAIGA_TIMEOUT = 15
+
 
 GOOGLE_AUTH_ALLOWED_DOMAINS = [domain.lower() for domain in env_to_list(
     "GOOGLE_AUTH_ALLOWED_DOMAINS",
