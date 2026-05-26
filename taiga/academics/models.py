@@ -41,20 +41,17 @@ class CourseEdition(models.Model):
     STATUS_PLANNED = "PLANNED"
     STATUS_ACTIVE = "ACTIVE"
     STATUS_CLOSED = "CLOSED"
-    STATUS_ARCHIVED = "ARCHIVED"
     STATUS_CHOICES = [
         (STATUS_PLANNED, "Planned"),
         (STATUS_ACTIVE, "Active"),
         (STATUS_CLOSED, "Closed"),
-        (STATUS_ARCHIVED, "Archived"),
     ]
 
-    # Valid status transitions: PLANNED→ACTIVE→CLOSED→ARCHIVED (no rollback)
+    # Valid status transitions: PLANNED→ACTIVE→CLOSED (no rollback)
     VALID_TRANSITIONS = {
         STATUS_PLANNED: [STATUS_ACTIVE],
         STATUS_ACTIVE: [STATUS_CLOSED],
-        STATUS_CLOSED: [STATUS_ARCHIVED],
-        STATUS_ARCHIVED: [],
+        STATUS_CLOSED: [],
     }
 
     subject = models.ForeignKey(
@@ -312,31 +309,3 @@ class CourseMetricsPolicy(models.Model):
         return f"{self.course_edition.key} metrics policy"
 
 
-class CourseDashboardReader(models.Model):
-    course_edition = models.ForeignKey(
-        CourseEdition,
-        related_name="dashboard_readers",
-        on_delete=models.CASCADE,
-    )
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        related_name="readable_editions",
-        on_delete=models.CASCADE,
-    )
-    is_active = models.BooleanField(default=True)
-    granted_at = models.DateTimeField(auto_now_add=True)
-    granted_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True, blank=True,
-        on_delete=models.SET_NULL,
-        related_name="granted_dashboard_reads",
-    )
-
-    class Meta:
-        ordering = ["course_edition", "user"]
-        unique_together = [["course_edition", "user"]]
-        verbose_name = "Course Dashboard Reader"
-        verbose_name_plural = "Course Dashboard Readers"
-
-    def __str__(self):
-        return f"{self.user.username} → {self.course_edition.key}"

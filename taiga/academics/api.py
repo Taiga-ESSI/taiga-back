@@ -58,9 +58,9 @@ class SubjectViewSet(ModelCrudViewSet):
         self.check_permissions(request, "instructor_check", None)
         from .permissions import get_accessible_edition_ids
         accessible = get_accessible_edition_ids(request.user)
-        ids = list(accessible.values_list("pk", flat=True))
-        single_edition_id = ids[0] if len(ids) == 1 else None
-        return response.Ok({"is_instructor": True, "single_edition_id": single_edition_id})
+        editions = list(accessible.values("pk", "key"))
+        single_edition_key = editions[0]["key"] if len(editions) == 1 else None
+        return response.Ok({"is_instructor": True, "single_edition_key": single_edition_key})
 
     @detail_route(methods=["get"])
     def metrics(self, request, pk=None):
@@ -77,6 +77,7 @@ class SubjectViewSet(ModelCrudViewSet):
 class CourseEditionViewSet(ModelCrudViewSet):
     permission_classes = (permissions.CourseEditionPermission,)
     serializer_class = serializers.CourseEditionSerializer
+    lookup_field = 'key'
 
     def get_queryset(self):
         qs = models.CourseEdition.objects.select_related("subject").all()
@@ -99,8 +100,8 @@ class CourseEditionViewSet(ModelCrudViewSet):
         serializer.save(created_by=self.request.user)
 
     @detail_route(methods=["get"])
-    def dashboard(self, request, pk=None):
-        edition = get_object_or_404(models.CourseEdition, pk=pk)
+    def dashboard(self, request, key=None):
+        edition = get_object_or_404(models.CourseEdition, key=key)
         self.check_permissions(request, "dashboard", edition)
 
         force = request.QUERY_PARAMS.get("refresh", "").lower() in ("1", "true", "yes")
@@ -117,8 +118,8 @@ class CourseEditionViewSet(ModelCrudViewSet):
         return response.Ok(data)
 
     @detail_route(methods=["get", "post"])
-    def teams(self, request, pk=None):
-        edition = get_object_or_404(models.CourseEdition, pk=pk)
+    def teams(self, request, key=None):
+        edition = get_object_or_404(models.CourseEdition, key=key)
         self.check_permissions(request, "teams", edition)
 
         if request.method == "GET":
@@ -341,6 +342,8 @@ class CourseMetricsPolicyViewSet(ModelCrudViewSet):
 
         if self.request.QUERY_PARAMS.get("course_edition_id"):
             qs = qs.filter(course_edition_id=self.request.QUERY_PARAMS["course_edition_id"])
+        if self.request.QUERY_PARAMS.get("course_edition_key"):
+            qs = qs.filter(course_edition__key=self.request.QUERY_PARAMS["course_edition_key"])
         if self.request.QUERY_PARAMS.get("project_slug"):
             qs = qs.filter(
                 course_edition__teams__project_link__project__slug=self.request.QUERY_PARAMS["project_slug"]
@@ -351,24 +354,3 @@ class CourseMetricsPolicyViewSet(ModelCrudViewSet):
         serializer.save(updated_by=self.request.user)
 
 
-class CourseDashboardReaderViewSet(ModelCrudViewSet):
-    permission_classes = (permissions.CourseDashboardReaderPermission,)
-    serializer_class = serializers.CourseDashboardReaderSerializer
-
-    def get_queryset(self):
-        qs = models.CourseDashboardReader.objects.select_related(
-            "course_edition", "user"
-        ).all()
-
-        if not _is_admin_user(self.request.user):
-            accessible = permissions.get_accessible_edition_ids(self.request.user)
-            qs = qs.filter(course_edition__in=accessible)
-
-        if self.request.QUERY_PARAMS.get("course_edition_id"):
-            qs = qs.filter(course_edition_id=self.request.QUERY_PARAMS["course_edition_id"])
-        if self.request.QUERY_PARAMS.get("is_active"):
-            qs = qs.filter(is_active=self.request.QUERY_PARAMS["is_active"].lower() == "true")
-        return qs
-
-    def perform_create(self, serializer):
-        serializer.save(granted_by=self.request.user)

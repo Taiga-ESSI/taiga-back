@@ -270,8 +270,8 @@ from taiga.academics.api import (
     EditionProfessorAssignmentViewSet,
     ProfessorTeamAssignmentViewSet,
     CourseMetricsPolicyViewSet,
-    CourseDashboardReaderViewSet,
 )
+
 
 router.register(r"academics/subjects", SubjectViewSet, base_name="academics-subjects")
 router.register(r"academics/course-editions", CourseEditionViewSet, base_name="academics-course-editions")
@@ -282,7 +282,6 @@ router.register(r"academics/coordinator-assignments", SubjectCoordinatorAssignme
 router.register(r"academics/professor-assignments", EditionProfessorAssignmentViewSet, base_name="academics-professor-assignments")
 router.register(r"academics/team-assignments", ProfessorTeamAssignmentViewSet, base_name="academics-team-assignments")
 router.register(r"academics/metrics-policies", CourseMetricsPolicyViewSet, base_name="academics-metrics-policies")
-router.register(r"academics/dashboard-readers", CourseDashboardReaderViewSet, base_name="academics-dashboard-readers")
 
 # Webhooks
 from taiga.webhooks.api import WebhookViewSet

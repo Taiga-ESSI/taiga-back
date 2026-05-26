@@ -126,25 +126,6 @@ class IsEditionProfessor(PermissionComponent):
         ).exists()
 
 
-class IsEditionReader(PermissionComponent):
-    """User has been granted explicit read access to the current course edition."""
-
-    def check_permissions(self, request, view, obj=None):
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        edition = _resolve_edition(obj, view, request)
-        if edition is None:
-            return False
-
-        from .models import CourseDashboardReader
-        return CourseDashboardReader.objects.filter(
-            course_edition=edition,
-            user=request.user,
-            is_active=True,
-        ).exists()
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -171,11 +152,7 @@ def get_accessible_edition_ids(user):
         professor_assignments__teacher_profile=profile,
         professor_assignments__is_active=True,
     )
-    as_reader = CourseEdition.objects.filter(
-        dashboard_readers__user=user,
-        dashboard_readers__is_active=True,
-    )
-    return (coordinated | as_professor | as_reader).distinct()
+    return (coordinated | as_professor).distinct()
 
 
 def _resolve_edition(obj, view, request):
@@ -224,7 +201,7 @@ class CourseEditionPermission(TaigaResourcePermission):
     partial_update_perms = IsAcademicAdmin() | IsEditionCoordinator()
     destroy_perms = IsAcademicAdmin()
     # Custom action: dashboard
-    dashboard_perms = IsAcademicAdmin() | IsEditionCoordinator() | IsEditionProfessor() | IsEditionReader()
+    dashboard_perms = IsAcademicAdmin() | IsEditionCoordinator() | IsEditionProfessor()
     # Custom action: teams (list/create teams of an edition)
     teams_perms = IsAcademicAdmin() | IsEditionCoordinator()
 
@@ -310,12 +287,3 @@ class CourseMetricsPolicyPermission(TaigaResourcePermission):
     destroy_perms = IsAcademicAdmin()
 
 
-class CourseDashboardReaderPermission(TaigaResourcePermission):
-    enough_perms = IsAcademicAdmin() | IsSuperUser()
-    global_perms = None
-    list_perms = IsEditionCoordinator()
-    retrieve_perms = IsEditionCoordinator()
-    create_perms = IsAcademicAdmin() | IsEditionCoordinator()
-    update_perms = IsAcademicAdmin() | IsEditionCoordinator()
-    partial_update_perms = IsAcademicAdmin() | IsEditionCoordinator()
-    destroy_perms = IsAcademicAdmin() | IsEditionCoordinator()

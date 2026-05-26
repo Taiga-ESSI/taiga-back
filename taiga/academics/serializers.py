@@ -191,16 +191,3 @@ class CourseMetricsPolicySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "updated_at"]
 
 
-class CourseDashboardReaderSerializer(serializers.ModelSerializer):
-    course_edition_id = serializers.IntegerField()
-    course_edition_key = serializers.CharField(source="course_edition.key", read_only=True)
-    user = UserSerializer(read_only=True)
-    user_id = serializers.IntegerField()
-
-    class Meta:
-        model = models.CourseDashboardReader
-        fields = [
-            "id", "course_edition_id", "course_edition_key",
-            "user", "user_id", "is_active", "granted_at",
-        ]
-        read_only_fields = ["id", "granted_at"]
