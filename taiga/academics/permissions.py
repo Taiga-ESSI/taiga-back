@@ -18,14 +18,14 @@ from taiga.base.api.permissions import (
 # ---------------------------------------------------------------------------
 
 class IsAcademicAdmin(PermissionComponent):
-    """User has an active TeacherProfile with global_role = ACADEMIC_ADMIN."""
+    """User has an active TeacherProfile with is_academic_admin = True."""
 
     def check_permissions(self, request, view, obj=None):
         if not request.user or not request.user.is_authenticated:
             return False
         try:
             profile = request.user.teacher_profile
-            return profile.is_active_teacher and profile.global_role == "ACADEMIC_ADMIN"
+            return profile.is_active_teacher and profile.is_academic_admin
         except Exception:
             return False
 

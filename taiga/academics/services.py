@@ -108,7 +108,7 @@ def _get_user_role_info(edition: CourseEdition, user) -> Tuple[bool, bool]:
     if teacher is None or not teacher.is_active_teacher:
         return False, False
 
-    if teacher.global_role == "ACADEMIC_ADMIN":
+    if teacher.is_academic_admin:
         is_professor = edition.professor_assignments.filter(
             teacher_profile=teacher, is_active=True
         ).exists()
@@ -142,7 +142,7 @@ def _get_visible_team_ids(edition: CourseEdition, user, professor_view: bool = F
     is_admin = (
         teacher is not None
         and teacher.is_active_teacher
-        and teacher.global_role == "ACADEMIC_ADMIN"
+        and teacher.is_academic_admin
     )
     is_coordinator = (
         teacher is not None

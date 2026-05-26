@@ -28,7 +28,7 @@ def _is_admin_user(user):
     try:
         return (
             user.teacher_profile.is_active_teacher
-            and user.teacher_profile.global_role == "ACADEMIC_ADMIN"
+            and user.teacher_profile.is_academic_admin
         )
     except Exception:
         return False

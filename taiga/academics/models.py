@@ -115,20 +115,12 @@ class CourseTeam(models.Model):
 
 
 class TeacherProfile(models.Model):
-    ROLE_ADMIN = "ACADEMIC_ADMIN"
-    ROLE_NONE = "NONE"
-    ROLE_CHOICES = [
-        (ROLE_ADMIN, "Academic Administrator"),
-        (ROLE_NONE, "None"),
-    ]
-
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         related_name="teacher_profile",
         on_delete=models.CASCADE,
     )
-    teacher_code = models.CharField(max_length=50, blank=True, default="")
-    global_role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_NONE)
+    is_academic_admin = models.BooleanField(default=False)
     is_active_teacher = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -139,10 +131,11 @@ class TeacherProfile(models.Model):
         verbose_name_plural = "Teacher Profiles"
 
     def __str__(self):
-        return f"{self.user.username} ({self.global_role})"
+        role = "Admin" if self.is_academic_admin else "Teacher"
+        return f"{self.user.username} ({role})"
 
     def is_admin(self):
-        return self.is_active_teacher and self.global_role == self.ROLE_ADMIN
+        return self.is_active_teacher and self.is_academic_admin
 
     def is_coordinator_of(self, subject):
         return self.coordinated_subjects.filter(
@@ -167,8 +160,6 @@ class SubjectCoordinatorAssignment(models.Model):
         on_delete=models.CASCADE,
     )
     is_active = models.BooleanField(default=True)
-    valid_from = models.DateField(null=True, blank=True)
-    valid_to = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -200,8 +191,6 @@ class EditionProfessorAssignment(models.Model):
         on_delete=models.CASCADE,
     )
     is_active = models.BooleanField(default=True)
-    valid_from = models.DateField(null=True, blank=True)
-    valid_to = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

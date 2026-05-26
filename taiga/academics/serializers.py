@@ -123,7 +123,7 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.TeacherProfile
         fields = [
-            "id", "user", "user_id", "teacher_code", "global_role",
+            "id", "user", "user_id", "is_academic_admin",
             "is_active_teacher", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
@@ -141,7 +141,7 @@ class SubjectCoordinatorAssignmentSerializer(serializers.ModelSerializer):
         fields = [
             "id", "subject_id", "subject_code", "subject_name",
             "teacher_profile_id", "teacher_username",
-            "is_active", "valid_from", "valid_to", "created_at", "updated_at",
+            "is_active", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
@@ -157,7 +157,7 @@ class EditionProfessorAssignmentSerializer(serializers.ModelSerializer):
         fields = [
             "id", "course_edition_id", "course_edition_key",
             "teacher_profile_id", "teacher_username",
-            "is_active", "valid_from", "valid_to", "created_at", "updated_at",
+            "is_active", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
