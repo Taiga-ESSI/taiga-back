@@ -5,6 +5,7 @@
 #
 # Copyright (c) 2021-present Kaleidos INC
 
+from django import forms
 from django.contrib import admin
 
 from . import models
@@ -82,6 +83,41 @@ class ProfessorTeamAssignmentInline(admin.TabularInline):
 
 
 # ---------------------------------------------------------------------------
+# Custom form for CourseTeam — includes metrics config fields
+# ---------------------------------------------------------------------------
+
+class CourseTeamAdminForm(forms.ModelForm):
+    PROVIDER_CHOICES = [
+        ("internal", "Internal (Taiga)"),
+        ("external", "External (Learning Dashboard)"),
+    ]
+    metrics_provider = forms.ChoiceField(
+        choices=PROVIDER_CHOICES,
+        required=False,
+        label="Metrics provider",
+    )
+    external_project_id = forms.CharField(
+        required=False,
+        label="External project ID (Learning Dashboard)",
+        help_text="Only required when provider is External.",
+    )
+
+    class Meta:
+        model = models.CourseTeam
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            try:
+                config = self.instance.project_link.project.metrics_config
+                self.fields["metrics_provider"].initial = config.provider
+                self.fields["external_project_id"].initial = config.external_project_id
+            except Exception:
+                pass
+
+
+# ---------------------------------------------------------------------------
 # Model admins
 # ---------------------------------------------------------------------------
 
@@ -103,10 +139,20 @@ class CourseEditionAdmin(admin.ModelAdmin):
 
 @admin.register(models.CourseTeam)
 class CourseTeamAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "course_edition", "is_active", "linked_project"]
+    form = CourseTeamAdminForm
+    list_display = ["__str__", "course_edition", "is_active", "linked_project", "metrics_provider_display"]
     list_filter = ["is_active", "course_edition__subject"]
     search_fields = ["team_code", "display_name", "course_edition__key"]
     inlines = [TeamProjectLinkInline, ProfessorTeamAssignmentInline]
+    fieldsets = [
+        (None, {
+            "fields": ["course_edition", "team_code", "display_name", "is_active"],
+        }),
+        ("Metrics configuration", {
+            "fields": ["metrics_provider", "external_project_id"],
+            "description": "Configure whether this team's linked Taiga project uses internal or external metrics.",
+        }),
+    ]
 
     def linked_project(self, obj):
         if hasattr(obj, "project_link"):
@@ -114,12 +160,36 @@ class CourseTeamAdmin(admin.ModelAdmin):
         return "—"
     linked_project.short_description = "Linked project"
 
+    def metrics_provider_display(self, obj):
+        try:
+            config = obj.project_link.project.metrics_config
+            return "External (LD)" if config.provider == "external" else "Internal"
+        except Exception:
+            return "—"
+    metrics_provider_display.short_description = "Metrics"
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        provider = form.cleaned_data.get("metrics_provider")
+        external_id = form.cleaned_data.get("external_project_id", "")
+        if provider:
+            try:
+                from taiga.projects.metrics.models import ProjectMetricsConfig
+                config, _ = ProjectMetricsConfig.objects.get_or_create(
+                    project=obj.project_link.project
+                )
+                config.provider = provider
+                config.external_project_id = external_id
+                config.save()
+            except Exception:
+                pass
+
 
 @admin.register(models.TeacherProfile)
 class TeacherProfileAdmin(admin.ModelAdmin):
     list_display = ["user", "is_academic_admin", "is_active_teacher"]
     list_filter = ["is_academic_admin", "is_active_teacher"]
-    search_fields = ["user__username", "user__first_name", "user__last_name", "teacher_code"]
+    search_fields = ["user__username", "user__first_name", "user__last_name"]
 
 
 @admin.register(models.SubjectCoordinatorAssignment)
