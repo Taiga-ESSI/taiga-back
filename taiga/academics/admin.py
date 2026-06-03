@@ -190,37 +190,3 @@ class TeacherProfileAdmin(admin.ModelAdmin):
     list_display = ["user", "is_academic_admin", "is_active_teacher"]
     list_filter = ["is_academic_admin", "is_active_teacher"]
     search_fields = ["user__username", "user__first_name", "user__last_name"]
-
-
-@admin.register(models.SubjectCoordinatorAssignment)
-class SubjectCoordinatorAssignmentAdmin(admin.ModelAdmin):
-    list_display = ["teacher_profile", "subject", "is_active"]
-    list_filter = ["is_active", "subject"]
-    search_fields = ["teacher_profile__user__username", "subject__code"]
-
-
-@admin.register(models.EditionProfessorAssignment)
-class EditionProfessorAssignmentAdmin(admin.ModelAdmin):
-    list_display = ["teacher_profile", "course_edition", "is_active"]
-    list_filter = ["is_active", "course_edition__subject"]
-    search_fields = ["teacher_profile__user__username", "course_edition__key"]
-
-
-@admin.register(models.ProfessorTeamAssignment)
-class ProfessorTeamAssignmentAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "is_active"]
-    list_filter = ["is_active"]
-    search_fields = ["edition_professor_assignment__teacher_profile__user__username", "course_team__team_code"]
-
-
-@admin.register(models.TeamProjectLink)
-class TeamProjectLinkAdmin(admin.ModelAdmin):
-    list_display = ["course_team", "project", "is_active", "linked_at"]
-    list_filter = ["is_active"]
-    search_fields = ["course_team__team_code", "project__slug"]
-
-
-@admin.register(models.CourseMetricsPolicy)
-class CourseMetricsPolicyAdmin(admin.ModelAdmin):
-    list_display = ["course_edition", "allow_student_drilldown", "updated_at"]
-    search_fields = ["course_edition__key"]
