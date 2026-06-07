@@ -49,13 +49,14 @@ class CourseEditionSerializer(serializers.ModelSerializer):
                 )
         return data
 
-    def validate_status(self, value):
-        if self.instance and value != self.instance.status:
-            if not self.instance.can_transition_to(value):
+    def validate_status(self, attrs, source):
+        value = attrs.get(source)
+        if value and self.object and value != self.object.status:
+            if not self.object.can_transition_to(value):
                 raise serializers.ValidationError(
-                    f"Invalid status transition from '{self.instance.status}' to '{value}'."
+                    f"Invalid status transition from '{self.object.status}' to '{value}'."
                 )
-        return value
+        return attrs
 
     class Meta:
         model = models.CourseEdition
@@ -99,11 +100,11 @@ class CourseTeamSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
-    def validate_team_code(self, value):
+    def validate_team_code(self, attrs, source):
         # team_code is immutable after creation
-        if self.instance:
-            return self.instance.team_code
-        return value
+        if self.object:
+            attrs[source] = self.object.team_code
+        return attrs
 
 
 class UserSerializer(serializers.Serializer):

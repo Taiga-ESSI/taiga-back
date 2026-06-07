@@ -174,7 +174,7 @@ def _get_visible_team_ids(edition: CourseEdition, user, professor_view: bool = F
         ).values_list("course_team_id", flat=True)
     )
 
-    return assigned_ids if assigned_ids else None
+    return assigned_ids
 
 
 # Display names for known LD individual metric base IDs (used in settings panel)

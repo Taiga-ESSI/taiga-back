@@ -134,7 +134,8 @@ class CourseEditionViewSet(ModelCrudViewSet):
         data["course_edition_id"] = edition.pk
         serializer = serializers.CourseTeamSerializer(data=data)
         if serializer.is_valid():
-            serializer.save(course_edition=edition, created_by=request.user)
+            serializer.object.created_by = request.user
+            serializer.save()
             return response.Created(serializer.data)
         return response.BadRequest(serializer.errors)
 
