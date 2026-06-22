@@ -154,8 +154,9 @@ def login_with_google(request):
 
         payload = _verify_credential(raw_token, client_hint)
 
-        with open("google_auth_debug.log", "a") as f:
-            f.write(f"Payload: {payload}\n")
+        # with open("google_auth_debug.log", "a") as f:
+           # f.write(f"Payload: {payload}\n")
+        logger.debug("Google auth payload: %s", payload)
 
         if payload.get("aud") not in CLIENT_IDS:
             logger.warning("Rejected Google credential with unexpected audience: %s", payload.get("aud"))
@@ -177,10 +178,11 @@ def login_with_google(request):
         user = _get_or_create_user(email.lower(), payload)
         return make_auth_response_data(user)
     except Exception as e:
-        with open("google_auth_debug.log", "a") as f:
-            f.write(f"Error: {e}\n")
-            import traceback
-            traceback.print_exc(file=f)
+        # with open("google_auth_debug.log", "a") as f:
+            # f.write(f"Error: {e}\n")
+            # import traceback
+            # traceback.print_exc(file=f)
+        logger.exception("Error during Google auth: %s", e)
         raise
 
 

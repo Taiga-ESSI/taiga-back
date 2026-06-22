@@ -782,3 +782,96 @@ def create_user(**kwargs):
     ProjectTemplateFactory.create(slug=settings.DEFAULT_PROJECT_TEMPLATE)
     RoleFactory.create()
     return UserFactory.create(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Academics factories
+# ---------------------------------------------------------------------------
+
+class SubjectFactory(Factory):
+    class Meta:
+        model = "academics.Subject"
+        strategy = factory.CREATE_STRATEGY
+
+    code = factory.Sequence(lambda n: "SUB{:03d}".format(n))
+    name = factory.Sequence(lambda n: "Subject {}".format(n))
+    department = "Computer Science"
+    is_active = True
+
+
+class CourseEditionFactory(Factory):
+    class Meta:
+        model = "academics.CourseEdition"
+        strategy = factory.CREATE_STRATEGY
+
+    subject = factory.SubFactory("tests.factories.SubjectFactory")
+    key = factory.Sequence(lambda n: "2024-Q1-{:03d}".format(n))
+    academic_year = 2024
+    term = "Q1"
+    start_date = date(2024, 1, 15)
+    end_date = date(2024, 5, 31)
+    status = "PLANNED"
+
+
+class TeacherProfileFactory(Factory):
+    class Meta:
+        model = "academics.TeacherProfile"
+        strategy = factory.CREATE_STRATEGY
+
+    user = factory.SubFactory("tests.factories.UserFactory")
+    is_academic_admin = False
+    is_active_teacher = True
+
+
+class CourseTeamFactory(Factory):
+    class Meta:
+        model = "academics.CourseTeam"
+        strategy = factory.CREATE_STRATEGY
+
+    course_edition = factory.SubFactory("tests.factories.CourseEditionFactory")
+    team_code = factory.Sequence(lambda n: "T{:02d}".format(n))
+    display_name = factory.Sequence(lambda n: "Team {}".format(n))
+    is_active = True
+
+
+class SubjectCoordinatorAssignmentFactory(Factory):
+    class Meta:
+        model = "academics.SubjectCoordinatorAssignment"
+        strategy = factory.CREATE_STRATEGY
+
+    subject = factory.SubFactory("tests.factories.SubjectFactory")
+    teacher_profile = factory.SubFactory("tests.factories.TeacherProfileFactory")
+    is_active = True
+
+
+class EditionProfessorAssignmentFactory(Factory):
+    class Meta:
+        model = "academics.EditionProfessorAssignment"
+        strategy = factory.CREATE_STRATEGY
+
+    course_edition = factory.SubFactory("tests.factories.CourseEditionFactory")
+    teacher_profile = factory.SubFactory("tests.factories.TeacherProfileFactory")
+    is_active = True
+
+
+class ProfessorTeamAssignmentFactory(Factory):
+    class Meta:
+        model = "academics.ProfessorTeamAssignment"
+        strategy = factory.CREATE_STRATEGY
+
+    edition_professor_assignment = factory.SubFactory("tests.factories.EditionProfessorAssignmentFactory")
+    course_team = factory.SubFactory("tests.factories.CourseTeamFactory")
+    is_active = True
+
+
+class CourseMetricsPolicyFactory(Factory):
+    class Meta:
+        model = "academics.CourseMetricsPolicy"
+        strategy = factory.CREATE_STRATEGY
+
+    course_edition = factory.SubFactory("tests.factories.CourseEditionFactory")
+    visible_to_students_metric_ids = []
+    hidden_metric_ids = []
+    team_metric_order = []
+    project_metric_order = []
+    allow_student_drilldown = True

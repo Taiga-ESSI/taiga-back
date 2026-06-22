@@ -1,0 +1,1188 @@
+openapi: 3.0.3
+info:
+  title: Taiga Instructor API — Módulo Academics
+  version: 1.0.0
+  description: >
+    API REST del módulo academics (capa instructor) desarrollado sobre Taiga.
+    Todos los endpoints requieren autenticación JWT (header Authorization: Bearer <token>).
+    URL base: /api/v1/
+
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Subject:
+      type: object
+      properties:
+        id:            { type: integer, readOnly: true }
+        code:          { type: string, maxLength: 50 }
+        name:          { type: string, maxLength: 255 }
+        department:    { type: string, maxLength: 255 }
+        is_active:     { type: boolean }
+        created_at:    { type: string, format: date-time, readOnly: true }
+        updated_at:    { type: string, format: date-time, readOnly: true }
+      required: [code, name]
+
+    CourseEdition:
+      type: object
+      properties:
+        id:             { type: integer, readOnly: true }
+        subject:        { $ref: '#/components/schemas/Subject', readOnly: true }
+        subject_id:     { type: integer, writeOnly: true }
+        key:            { type: string, maxLength: 100 }
+        academic_year:  { type: integer }
+        term:
+          type: string
+          enum: [Q1, Q2, ANNUAL]
+        start_date:     { type: string, format: date }
+        end_date:       { type: string, format: date }
+        status:
+          type: string
+          enum: [PLANNED, ACTIVE, CLOSED]
+          default: PLANNED
+        team_count:     { type: integer, readOnly: true }
+        professor_count: { type: integer, readOnly: true }
+        created_at:     { type: string, format: date-time, readOnly: true }
+        updated_at:     { type: string, format: date-time, readOnly: true }
+      required: [subject_id, key, academic_year, term, start_date, end_date]
+
+    TeamProjectLink:
+      type: object
+      properties:
+        id:             { type: integer, readOnly: true }
+        course_team_id: { type: integer, readOnly: true }
+        project_id:     { type: integer }
+        project_name:   { type: string, readOnly: true }
+        project_slug:   { type: string, readOnly: true }
+        source_url:     { type: string, format: uri }
+        is_active:      { type: boolean }
+        linked_at:      { type: string, format: date-time, readOnly: true }
+      required: [project_id]
+
+    CourseTeam:
+      type: object
+      properties:
+        id:                  { type: integer, readOnly: true }
+        course_edition_id:   { type: integer, writeOnly: true }
+        course_edition_key:  { type: string, readOnly: true }
+        team_code:           { type: string, maxLength: 20 }
+        display_name:        { type: string, maxLength: 255 }
+        is_active:           { type: boolean }
+        project_link:        { $ref: '#/components/schemas/TeamProjectLink', readOnly: true, nullable: true }
+        created_at:          { type: string, format: date-time, readOnly: true }
+        updated_at:          { type: string, format: date-time, readOnly: true }
+      required: [course_edition_id, team_code, display_name]
+
+    User:
+      type: object
+      properties:
+        id:        { type: integer, readOnly: true }
+        username:  { type: string }
+        full_name: { type: string }
+        email:     { type: string, format: email }
+
+    TeacherProfile:
+      type: object
+      properties:
+        id:                { type: integer, readOnly: true }
+        user:              { $ref: '#/components/schemas/User', readOnly: true }
+        user_id:           { type: integer, writeOnly: true }
+        is_academic_admin: { type: boolean }
+        is_active_teacher: { type: boolean }
+        created_at:        { type: string, format: date-time, readOnly: true }
+        updated_at:        { type: string, format: date-time, readOnly: true }
+      required: [user_id]
+
+    SubjectCoordinatorAssignment:
+      type: object
+      properties:
+        id:                 { type: integer, readOnly: true }
+        subject_id:         { type: integer }
+        subject_code:       { type: string, readOnly: true }
+        subject_name:       { type: string, readOnly: true }
+        teacher_profile_id: { type: integer }
+        teacher_username:   { type: string, readOnly: true }
+        is_active:          { type: boolean }
+        created_at:         { type: string, format: date-time, readOnly: true }
+        updated_at:         { type: string, format: date-time, readOnly: true }
+      required: [subject_id, teacher_profile_id]
+
+    EditionProfessorAssignment:
+      type: object
+      properties:
+        id:                  { type: integer, readOnly: true }
+        course_edition_id:   { type: integer }
+        course_edition_key:  { type: string, readOnly: true }
+        teacher_profile_id:  { type: integer }
+        teacher_username:    { type: string, readOnly: true }
+        is_active:           { type: boolean }
+        created_at:          { type: string, format: date-time, readOnly: true }
+        updated_at:          { type: string, format: date-time, readOnly: true }
+      required: [course_edition_id, teacher_profile_id]
+
+    ProfessorTeamAssignment:
+      type: object
+      properties:
+        id:                              { type: integer, readOnly: true }
+        edition_professor_assignment_id: { type: integer }
+        course_team_id:                  { type: integer }
+        course_team_code:                { type: string, readOnly: true }
+        is_active:                       { type: boolean }
+        assigned_at:                     { type: string, format: date-time, readOnly: true }
+      required: [edition_professor_assignment_id, course_team_id]
+
+    CourseMetricsPolicy:
+      type: object
+      properties:
+        id:                              { type: integer, readOnly: true }
+        course_edition_id:               { type: integer }
+        course_edition_key:              { type: string, readOnly: true }
+        visible_to_students_metric_ids:  { type: array, items: { type: string } }
+        hidden_metric_ids:               { type: array, items: { type: string } }
+        team_metric_order:               { type: array, items: { type: string } }
+        project_metric_order:            { type: array, items: { type: string } }
+        allow_student_drilldown:         { type: boolean }
+        updated_at:                      { type: string, format: date-time, readOnly: true }
+      required: [course_edition_id]
+
+    TeamMetric:
+      type: object
+      properties:
+        id:               { type: string }
+        name:             { type: string }
+        value:            { type: number }
+        value_description: { type: string }
+        description:      { type: string }
+        classification:   { type: string, enum: [project, team] }
+        scope:            { type: string, enum: [individual, team] }
+        qualityFactors:   { type: array, items: { type: string } }
+        categoryName:     { type: string }
+
+    StudentMetric:
+      type: object
+      properties:
+        username:     { type: string }
+        name:         { type: string }
+        displayName:  { type: string }
+        metrics:      { type: array, items: { $ref: '#/components/schemas/TeamMetric' } }
+
+    TeamSnapshot:
+      type: object
+      properties:
+        group_id:             { type: integer }
+        group_code:           { type: string }
+        display_name:         { type: string }
+        project_id:           { type: integer }
+        project_slug:         { type: string }
+        project_name:         { type: string }
+        snapshot_computed_at: { type: string, format: date-time }
+        metrics_provider:     { type: string, enum: [internal, external] }
+        metrics:              { type: array, items: { $ref: '#/components/schemas/TeamMetric' } }
+        students:             { type: array, items: { $ref: '#/components/schemas/StudentMetric' } }
+        metrics_categories:   { type: array, items: { type: object } }
+        is_new_project:       { type: boolean }
+        drilldown_allowed:    { type: boolean }
+
+    AggregatedMetric:
+      type: object
+      properties:
+        metric_id:    { type: string }
+        metric_name:  { type: string }
+        description:  { type: string }
+        avg:          { type: number }
+        min:          { type: number }
+        max:          { type: number }
+        values:
+          type: array
+          items:
+            type: object
+            properties:
+              group_id:          { type: integer }
+              group_code:        { type: string }
+              value:             { type: number }
+              value_description: { type: string }
+
+    DashboardResponse:
+      type: object
+      properties:
+        course_edition_id:  { type: integer }
+        course_edition_key: { type: string }
+        groups:             { type: array, items: { $ref: '#/components/schemas/TeamSnapshot' } }
+        aggregated:         { type: object, additionalProperties: { $ref: '#/components/schemas/AggregatedMetric' } }
+        is_coordinator:     { type: boolean }
+        is_professor:       { type: boolean }
+        can_edit_settings:  { type: boolean }
+
+    InstructorCheckResponse:
+      type: object
+      properties:
+        is_instructor:        { type: boolean }
+        single_edition_key:   { type: string, nullable: true }
+
+    ResolveRequest:
+      type: object
+      properties:
+        source_url: { type: string, format: uri }
+      required: [source_url]
+
+    ResolveResponse:
+      type: object
+      properties:
+        project_id:    { type: integer }
+        project_name:  { type: string }
+        project_slug:  { type: string }
+        description:   { type: string }
+        member_count:  { type: integer }
+        is_accessible: { type: boolean }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+paths:
+
+  # ─────────────────────────────────────────────
+  # SUBJECTS
+  # ─────────────────────────────────────────────
+  /academics/subjects/:
+    get:
+      summary: List subjects
+      tags: [Subjects]
+      parameters:
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of subjects
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Subject' }
+    post:
+      summary: Create subject
+      tags: [Subjects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Subject' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subject' }
+
+  /academics/subjects/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Retrieve subject
+      tags: [Subjects]
+      responses:
+        '200':
+          description: Subject detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subject' }
+    put:
+      summary: Update subject
+      tags: [Subjects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Subject' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subject' }
+    patch:
+      summary: Partial update subject
+      tags: [Subjects]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Subject' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subject' }
+    delete:
+      summary: Delete subject
+      tags: [Subjects]
+      responses:
+        '204': { description: Deleted }
+
+  /academics/subjects/instructor_check/:
+    get:
+      summary: Check instructor status
+      description: >
+        Returns whether the authenticated user is an instructor and,
+        if they have exactly one accessible edition, its key.
+      tags: [Subjects]
+      responses:
+        '200':
+          description: Instructor check result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InstructorCheckResponse' }
+
+  /academics/subjects/{id}/metrics/:
+    get:
+      summary: Subject-level metrics comparison
+      description: Aggregated metrics per edition for all editions of a subject.
+      tags: [Subjects]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: refresh
+          in: query
+          description: Force cache invalidation
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Metrics per edition
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subject_id:   { type: integer }
+                  subject_code: { type: string }
+                  subject_name: { type: string }
+                  editions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        edition_id:   { type: integer }
+                        edition_key:  { type: string }
+                        academic_year: { type: integer }
+                        term:         { type: string }
+                        status:       { type: string }
+                        team_count:   { type: integer }
+                        aggregated:   { type: object }
+
+  # ─────────────────────────────────────────────
+  # COURSE EDITIONS
+  # ─────────────────────────────────────────────
+  /academics/course-editions/:
+    get:
+      summary: List course editions
+      tags: [Course Editions]
+      parameters:
+        - name: subject_id
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PLANNED, ACTIVE, CLOSED] }
+        - name: academic_year
+          in: query
+          schema: { type: integer }
+        - name: term
+          in: query
+          schema: { type: string, enum: [Q1, Q2, ANNUAL] }
+      responses:
+        '200':
+          description: List of course editions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CourseEdition' }
+    post:
+      summary: Create course edition
+      tags: [Course Editions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseEdition' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseEdition' }
+
+  /academics/course-editions/{key}/:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema: { type: string }
+        description: Unique edition key (e.g. ASW-2425-Q1)
+    get:
+      summary: Retrieve course edition
+      tags: [Course Editions]
+      responses:
+        '200':
+          description: Course edition detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseEdition' }
+    put:
+      summary: Update course edition
+      tags: [Course Editions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseEdition' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseEdition' }
+    patch:
+      summary: Partial update course edition (including status transitions)
+      tags: [Course Editions]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseEdition' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseEdition' }
+    delete:
+      summary: Delete course edition
+      tags: [Course Editions]
+      responses:
+        '204': { description: Deleted }
+
+  /academics/course-editions/{key}/dashboard/:
+    get:
+      summary: Edition dashboard
+      description: >
+        Returns aggregated metrics for all active teams in the edition that have a
+        linked Taiga project. Applies CourseMetricsPolicy (hiding, ordering, drilldown).
+        Query param professor_view=true forces professor-level filtering for coordinators.
+      tags: [Course Editions]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+        - name: refresh
+          in: query
+          description: Force cache invalidation
+          schema: { type: boolean }
+        - name: raw
+          in: query
+          description: Skip policy filtering (for settings panel)
+          schema: { type: boolean }
+        - name: professor_view
+          in: query
+          description: Show only professor-assigned teams even for coordinators
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardResponse' }
+
+  /academics/course-editions/{key}/teams/:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: List teams of an edition
+      tags: [Course Editions]
+      parameters:
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CourseTeam' }
+    post:
+      summary: Create team in an edition
+      tags: [Course Editions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseTeam' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseTeam' }
+
+  # ─────────────────────────────────────────────
+  # TEAMS
+  # ─────────────────────────────────────────────
+  /academics/teams/:
+    get:
+      summary: List teams
+      tags: [Teams]
+      parameters:
+        - name: edition
+          in: query
+          schema: { type: integer }
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CourseTeam' }
+    post:
+      summary: Create team
+      tags: [Teams]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseTeam' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseTeam' }
+
+  /academics/teams/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Retrieve team
+      tags: [Teams]
+      responses:
+        '200':
+          description: Team detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseTeam' }
+    put:
+      summary: Update team
+      tags: [Teams]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseTeam' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseTeam' }
+    patch:
+      summary: Partial update team
+      tags: [Teams]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseTeam' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseTeam' }
+    delete:
+      summary: Delete team
+      tags: [Teams]
+      responses:
+        '204': { description: Deleted }
+
+  /academics/teams/{id}/project_link/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Get project link for a team
+      tags: [Teams]
+      responses:
+        '200':
+          description: Project link
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamProjectLink' }
+        '404': { description: No project link }
+    post:
+      summary: Create project link for a team
+      tags: [Teams]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamProjectLink' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamProjectLink' }
+        '400':
+          description: Team already has a project link
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    patch:
+      summary: Update project link for a team
+      tags: [Teams]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamProjectLink' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamProjectLink' }
+    delete:
+      summary: Remove project link from a team
+      tags: [Teams]
+      responses:
+        '204': { description: Deleted }
+
+  # ─────────────────────────────────────────────
+  # TEACHERS
+  # ─────────────────────────────────────────────
+  /academics/teachers/:
+    get:
+      summary: List teacher profiles
+      tags: [Teachers]
+      parameters:
+        - name: is_active_teacher
+          in: query
+          schema: { type: boolean }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of teacher profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TeacherProfile' }
+    post:
+      summary: Create teacher profile
+      tags: [Teachers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeacherProfile' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeacherProfile' }
+
+  /academics/teachers/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Retrieve teacher profile
+      tags: [Teachers]
+      responses:
+        '200':
+          description: Teacher profile detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeacherProfile' }
+    put:
+      summary: Update teacher profile
+      tags: [Teachers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeacherProfile' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeacherProfile' }
+    patch:
+      summary: Partial update teacher profile
+      tags: [Teachers]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeacherProfile' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeacherProfile' }
+    delete:
+      summary: Delete teacher profile
+      tags: [Teachers]
+      responses:
+        '204': { description: Deleted }
+
+  # ─────────────────────────────────────────────
+  # PROJECT LINKS
+  # ─────────────────────────────────────────────
+  /academics/project-links/:
+    get:
+      summary: List project links
+      tags: [Project Links]
+      parameters:
+        - name: team
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: List of project links
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TeamProjectLink' }
+    post:
+      summary: Create project link
+      tags: [Project Links]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamProjectLink' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamProjectLink' }
+
+  /academics/project-links/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Retrieve project link
+      tags: [Project Links]
+      responses:
+        '200':
+          description: Project link detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamProjectLink' }
+    put:
+      summary: Update project link
+      tags: [Project Links]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamProjectLink' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamProjectLink' }
+    patch:
+      summary: Partial update project link
+      tags: [Project Links]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamProjectLink' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamProjectLink' }
+    delete:
+      summary: Delete project link
+      tags: [Project Links]
+      responses:
+        '204': { description: Deleted }
+
+  /academics/project-links/resolve/:
+    post:
+      summary: Resolve a Taiga project URL
+      description: Resolves a Taiga project URL (by slug) to its project_id and metadata.
+      tags: [Project Links]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveRequest' }
+      responses:
+        '200':
+          description: Project metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveResponse' }
+        '400':
+          description: URL missing or project not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ─────────────────────────────────────────────
+  # COORDINATOR ASSIGNMENTS
+  # ─────────────────────────────────────────────
+  /academics/coordinator-assignments/:
+    get:
+      summary: List coordinator assignments
+      tags: [Assignments]
+      parameters:
+        - name: subject_id
+          in: query
+          schema: { type: integer }
+        - name: teacher_profile_id
+          in: query
+          schema: { type: integer }
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: List of coordinator assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SubjectCoordinatorAssignment' }
+    post:
+      summary: Create coordinator assignment
+      tags: [Assignments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubjectCoordinatorAssignment' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubjectCoordinatorAssignment' }
+
+  /academics/coordinator-assignments/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Retrieve coordinator assignment
+      tags: [Assignments]
+      responses:
+        '200':
+          description: Detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubjectCoordinatorAssignment' }
+    patch:
+      summary: Update coordinator assignment (e.g. deactivate)
+      tags: [Assignments]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubjectCoordinatorAssignment' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubjectCoordinatorAssignment' }
+    delete:
+      summary: Delete coordinator assignment
+      tags: [Assignments]
+      responses:
+        '204': { description: Deleted }
+
+  # ─────────────────────────────────────────────
+  # PROFESSOR ASSIGNMENTS
+  # ─────────────────────────────────────────────
+  /academics/professor-assignments/:
+    get:
+      summary: List edition professor assignments
+      tags: [Assignments]
+      parameters:
+        - name: course_edition_id
+          in: query
+          schema: { type: integer }
+        - name: teacher_profile_id
+          in: query
+          schema: { type: integer }
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: List of professor assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EditionProfessorAssignment' }
+    post:
+      summary: Create professor assignment
+      tags: [Assignments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditionProfessorAssignment' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EditionProfessorAssignment' }
+
+  /academics/professor-assignments/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Retrieve professor assignment
+      tags: [Assignments]
+      responses:
+        '200':
+          description: Detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EditionProfessorAssignment' }
+    patch:
+      summary: Update professor assignment
+      tags: [Assignments]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditionProfessorAssignment' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EditionProfessorAssignment' }
+    delete:
+      summary: Delete professor assignment
+      tags: [Assignments]
+      responses:
+        '204': { description: Deleted }
+
+  # ─────────────────────────────────────────────
+  # TEAM ASSIGNMENTS
+  # ─────────────────────────────────────────────
+  /academics/team-assignments/:
+    get:
+      summary: List professor-team assignments
+      tags: [Assignments]
+      parameters:
+        - name: edition_professor_assignment_id
+          in: query
+          schema: { type: integer }
+        - name: course_team_id
+          in: query
+          schema: { type: integer }
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: List of team assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProfessorTeamAssignment' }
+    post:
+      summary: Create professor-team assignment
+      tags: [Assignments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfessorTeamAssignment' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfessorTeamAssignment' }
+
+  /academics/team-assignments/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Retrieve team assignment
+      tags: [Assignments]
+      responses:
+        '200':
+          description: Detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfessorTeamAssignment' }
+    patch:
+      summary: Update team assignment
+      tags: [Assignments]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfessorTeamAssignment' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfessorTeamAssignment' }
+    delete:
+      summary: Delete team assignment
+      tags: [Assignments]
+      responses:
+        '204': { description: Deleted }
+
+  # ─────────────────────────────────────────────
+  # METRICS POLICIES
+  # ─────────────────────────────────────────────
+  /academics/metrics-policies/:
+    get:
+      summary: List metrics policies
+      tags: [Metrics Policies]
+      parameters:
+        - name: course_edition_id
+          in: query
+          schema: { type: integer }
+        - name: course_edition_key
+          in: query
+          schema: { type: string }
+        - name: project_slug
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of metrics policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CourseMetricsPolicy' }
+    post:
+      summary: Create metrics policy
+      tags: [Metrics Policies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseMetricsPolicy' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseMetricsPolicy' }
+
+  /academics/metrics-policies/{id}/:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      summary: Retrieve metrics policy
+      tags: [Metrics Policies]
+      responses:
+        '200':
+          description: Policy detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseMetricsPolicy' }
+    put:
+      summary: Replace metrics policy
+      tags: [Metrics Policies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseMetricsPolicy' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseMetricsPolicy' }
+    patch:
+      summary: Partial update metrics policy
+      tags: [Metrics Policies]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseMetricsPolicy' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseMetricsPolicy' }
+    delete:
+      summary: Delete metrics policy
+      tags: [Metrics Policies]
+      responses:
+        '204': { description: Deleted }

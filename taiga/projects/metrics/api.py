@@ -328,6 +328,27 @@ class MetricsViewSet(ReadOnlyListViewSet):
             "updated_by": updated_by,
         }
 
+    @staticmethod
+    def _get_academic_policy_order(project):
+        """
+        Returns (project_metric_order, team_metric_order) from the CourseMetricsPolicy
+        of the academic edition linked to this project, or ([], []) if none exists.
+        """
+        try:
+            from taiga.academics.models import TeamProjectLink, CourseMetricsPolicy
+            link = (
+                TeamProjectLink.objects
+                .select_related("course_team__course_edition__metrics_policy")
+                .get(project=project, is_active=True)
+            )
+            try:
+                policy = link.course_team.course_edition.metrics_policy
+                return (policy.project_metric_order or []), (policy.team_metric_order or [])
+            except CourseMetricsPolicy.DoesNotExist:
+                return [], []
+        except Exception:
+            return [], []
+
     ##########################################################################
     # Configuration endpoints
     ##########################################################################
@@ -347,7 +368,16 @@ class MetricsViewSet(ReadOnlyListViewSet):
         if request.method == "GET":
             self.check_permissions(request, "config", project)
             config = self._get_or_create_project_config(project)
-            return response.Ok(self._serialize_project_config(project, config))
+            serialized = self._serialize_project_config(project, config)
+            # If the project is linked to an academic edition, the CourseMetricsPolicy
+            # order takes precedence over the per-project config order so that instructors
+            # control what students see via the Settings panel.
+            policy_project_order, policy_team_order = self._get_academic_policy_order(project)
+            if policy_project_order:
+                serialized["project_metrics_order"] = policy_project_order
+            if policy_team_order:
+                serialized["team_metrics_order"] = policy_team_order
+            return response.Ok(serialized)
 
         self.check_permissions(request, "config_update", project)
         payload = request.DATA or {}

@@ -135,7 +135,7 @@ class BaseMetric(ABC):
         Helper to build a standardized metric result dictionary.
         """
         return {
-            "id": f"{self.metric_id}_{self.project.slug}",
+            "id": self.metric_id,
             "name": self.name,
             "value": round(value, 4),
             "value_description": value_description,
@@ -143,6 +143,7 @@ class BaseMetric(ABC):
             "qualityFactors": self.quality_factors,
             "metadata": metadata or {},
             "classification": "project",
+            "scope": "team",
         }
 
 

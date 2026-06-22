@@ -25,6 +25,7 @@ FROM userstories_userstory_watchers INNER JOIN userstories_userstory ON userstor
 class Migration(migrations.Migration):
 
     dependencies = [
+        ('contenttypes', '0002_remove_content_type_name'),
         ('notifications', '0004_watched'),
         ('userstories', '0009_remove_userstory_is_archived'),
     ]
