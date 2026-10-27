@@ -98,7 +98,7 @@ GOOGLE_AUTH_ALLOWED_DOMAINS = [domain.lower() for domain in env_to_list(
 )]
 GOOGLE_AUTH_CLIENT_IDS = env_to_list(
     "GOOGLE_AUTH_CLIENT_IDS",
-    ["286907234950-enq7c1j4085fbj662otfptqqo24hk93u.apps.googleusercontent.com"],
+    ["1037740687162-ulst439rk7bjm7qhf69sujsg1t9bjsdt.apps.googleusercontent.com"],
 )
 GOOGLE_AUTH_AUTO_CREATE_USERS = env_to_bool("GOOGLE_AUTH_AUTO_CREATE", default=True)
 _google_auth_enabled_flag = env_to_bool("GOOGLE_AUTH_ENABLED", default=bool(GOOGLE_AUTH_CLIENT_IDS))
