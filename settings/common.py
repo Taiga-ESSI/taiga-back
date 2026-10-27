@@ -518,9 +518,12 @@ LOGGING = {
 
 AUTH_USER_MODEL = "users.User"
 
+# Browser sessions only. The SPA renews the access token on 401 and rotates
+# the refresh token while the user keeps coming back. A service in another
+# project must use an Application token (no expiry) instead of these JWTs.
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=365),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=365),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=3),
     'CANCEL_TOKEN_LIFETIME': timedelta(days=365),
 }
 
