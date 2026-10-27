@@ -519,9 +519,9 @@ LOGGING = {
 AUTH_USER_MODEL = "users.User"
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=8),
-    'CANCEL_TOKEN_LIFETIME': timedelta(days=100),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=365),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=365),
+    'CANCEL_TOKEN_LIFETIME': timedelta(days=365),
 }
 
 FLUSH_REFRESHED_TOKENS_PERIODICITY = 3 * 24 * 3600 # seconds
