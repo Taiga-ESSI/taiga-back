@@ -204,6 +204,7 @@ El backend soporta configuración mediante variables de entorno. Aquí está la 
 | `TAIGA_METRICS_PROVIDER` | Proveedor de métricas (`internal`/`external`) | `internal` |
 | `TAIGA_METRICS_SNAPSHOT_TTL` | TTL del caché de métricas (minutos) | `60` |
 | `LD_TAIGA_BACKEND_URL` | URL del backend Learning Dashboard | - |
+| `LD_API_KEY` | Clave compartida enviada a Learning Dashboard como `X-LD-API-Key` | - |
 | `LD_TAIGA_TIMEOUT` | Timeout para requests a LD (segundos) | `15` |
 
 ### Variables de Seguridad
@@ -361,6 +362,7 @@ TAIGA_METRICS_SNAPSHOT_TTL=60
 # Para usar Learning Dashboard externo
 TAIGA_METRICS_PROVIDER=external
 LD_TAIGA_BACKEND_URL=https://ld-backend.example.com
+LD_API_KEY=copy-the-root-LD_API_KEY-here
 ```
 
 ---

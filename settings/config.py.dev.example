@@ -6,3 +6,9 @@ DEBUG = True
 TEMPLATES[0]["OPTIONS"]['context_processors'] += "django.template.context_processors.debug"
 
 ENABLE_TELEMETRY = False
+
+# Learning Dashboard metrics proxy.
+# Generate LD_API_KEY once in the root project and reuse the same value here
+# when running taiga-back outside Docker.
+LD_TAIGA_BACKEND_URL = "http://localhost:8888"
+LD_API_KEY = "copy-the-root-LD_API_KEY-here"

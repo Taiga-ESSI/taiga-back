@@ -10,6 +10,7 @@ from datetime import timezone as dt_timezone
 from unittest import mock
 
 import pytest
+from django.test import override_settings
 
 from taiga.academics.services import (
     _aggregate_metrics,
@@ -445,6 +446,17 @@ def _make_ld_resp(data):
     return r
 
 
+@override_settings(LD_API_KEY="")
+def test_fetch_ld_payload_missing_api_key_returns_empty():
+    with mock.patch("taiga.academics.services.requests.get") as mock_get:
+        payload, computed_at = _fetch_ld_payload("EXT123")
+
+    mock_get.assert_not_called()
+    assert payload["metrics"] == []
+    assert payload["is_new_project"] is True
+    assert isinstance(computed_at, str)
+
+
 def test_fetch_ld_payload_network_error_returns_empty():
     with mock.patch(
         "taiga.academics.services.requests.get", side_effect=ConnectionError("timeout")
@@ -485,9 +497,11 @@ def test_fetch_ld_payload_success_with_team_metric():
         _make_ld_resp(ld_metrics),
         _make_ld_resp([]),
         _make_ld_resp([]),
-    ]):
+    ]) as mock_get:
         payload, computed_at = _fetch_ld_payload("EXT123")
 
+    for call in mock_get.call_args_list:
+        assert call.kwargs["headers"] == {"X-LD-API-Key": "test-ld-api-key"}
     assert len(payload["metrics"]) == 1
     assert payload["metrics"][0]["id"] == "commits"
     assert payload["metrics"][0]["classification"] == "project"

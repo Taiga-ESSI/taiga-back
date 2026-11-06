@@ -18,6 +18,15 @@ from .models import CourseEdition, Subject
 
 logger = logging.getLogger(__name__)
 
+LD_API_KEY_HEADER = "X-LD-API-Key"
+
+
+def _ld_request_headers() -> Dict[str, str]:
+    api_key = getattr(settings, "LD_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("LD_API_KEY must be configured for Learning Dashboard API calls")
+    return {LD_API_KEY_HEADER: api_key}
+
 
 def get_edition_dashboard(edition: CourseEdition, *, force: bool = False, raw: bool = False, requesting_user=None, professor_view: bool = False) -> Dict:
     """
@@ -215,9 +224,16 @@ def _fetch_ld_payload(external_project_id: str) -> Tuple[Dict, str]:
     computed_at = datetime.now(dt_timezone.utc).isoformat()
 
     try:
+        headers = _ld_request_headers()
+    except RuntimeError as exc:
+        logger.warning("LD metrics fetch failed for %s: %s", external_project_id, exc)
+        return {"metrics": [], "students": [], "metrics_categories": [], "is_new_project": True}, computed_at
+
+    try:
         resp = requests.get(
             f"{base_url}/api/metrics/current",
             params={"prj": external_project_id},
+            headers=headers,
             timeout=timeout,
         )
         resp.raise_for_status()
@@ -233,6 +249,7 @@ def _fetch_ld_payload(external_project_id: str) -> Tuple[Dict, str]:
         cat_resp = requests.get(
             f"{base_url}/api/metrics/categories",
             params={"prj": external_project_id},
+            headers=headers,
             timeout=timeout,
         )
         cat_resp.raise_for_status()
@@ -248,6 +265,7 @@ def _fetch_ld_payload(external_project_id: str) -> Tuple[Dict, str]:
         catalog_resp = requests.get(
             f"{base_url}/api/metrics",
             params={"prj": external_project_id},
+            headers=headers,
             timeout=timeout,
         )
         catalog_resp.raise_for_status()

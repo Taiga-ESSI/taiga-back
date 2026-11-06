@@ -86,6 +86,7 @@ except (TypeError, ValueError):
 LD_TAIGA_BACKEND_URL = os.environ.get(
     "LD_TAIGA_BACKEND_URL", "https://gessi-dashboard.essi.upc.edu"
 ).rstrip("/")
+LD_API_KEY = os.environ.get("LD_API_KEY", "")
 try:
     LD_TAIGA_TIMEOUT = int(os.environ.get("LD_TAIGA_TIMEOUT", "15"))
 except (TypeError, ValueError):
